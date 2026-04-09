@@ -1,0 +1,32 @@
+{
+  "name": "rain-radar",
+  "author": "OpenAI",
+  "version": "0.1.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Rain Radar",
+    "uuid": "45f7d2b8-174e-4793-8e10-b2037c4ec4ed",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": ["basalt"],
+    "capabilities": ["location"],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "REQUEST_FRAME",
+      "MAP_ZOOM",
+      "FRAME_WIDTH",
+      "FRAME_HEIGHT",
+      "FRAME_TOTAL_BYTES",
+      "FRAME_OFFSET",
+      "FRAME_CHUNK",
+      "STATUS_TEXT"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}

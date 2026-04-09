@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rain Radar Map Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", sans-serif;
+      --bg: #eef3f8;
+      --panel: #ffffff;
+      --border: #cfd9e4;
+      --text: #1f2937;
+      --muted: #526071;
+      --accent: #0f5ea8;
+      --accent-2: #0a3a63;
+      --pebble-screen-width: 25.15mm;
+      --pebble-screen-height: 28.69mm;
+      --pebble-body-width: 44.4mm;
+      --pebble-body-height: 58.8mm;
+      --pebble-inspector-scale: 2;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      background: linear-gradient(180deg, #f7fafc 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      line-height: 1.1;
+    }
+
+    .intro {
+      margin: 0 0 20px;
+      color: var(--muted);
+      max-width: 900px;
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 24px rgba(9, 30, 66, 0.06);
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      font: inherit;
+    }
+
+    input,
+    select {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+      padding: 0;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      background: var(--accent);
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button.secondary {
+      background: #4b5563;
+    }
+
+    button:hover {
+      filter: brightness(0.98);
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .inline-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0 10px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .status {
+      min-height: 22px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #0f5132;
+      margin: 6px 0 0;
+    }
+
+    .status.error {
+      color: #a61b1b;
+    }
+
+    .meta {
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .warning {
+      margin-bottom: 14px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #f5c17c;
+      background: #fff6e8;
+      color: #8a4b08;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .viewer {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .viewer-block label {
+      margin-bottom: 8px;
+    }
+
+    .canvas-wrap {
+      position: relative;
+    }
+
+    .pixel-scroll {
+      overflow: auto;
+      padding-bottom: 4px;
+    }
+
+    .pixel-true {
+      width: 512px;
+      max-width: none;
+      flex: 0 0 auto;
+    }
+
+    .overlay-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    canvas,
+    img {
+      width: 100%;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #fff;
+    }
+
+    .pebble-preview {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      justify-content: center;
+      padding: 12px 0;
+    }
+
+    .pebble-inspector {
+      width: 400px;
+      max-width: 100%;
+    }
+
+    .pebble-inspector canvas {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background: #ffffff;
+    }
+
+    .pebble-inspector-note {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .pebble-frame {
+      width: var(--pebble-body-width);
+      height: var(--pebble-body-height);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #202833 0%, #10161f 100%);
+      border: 1px solid #0b1118;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 12px 24px rgba(15, 23, 42, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5mm 4mm;
+    }
+
+    .pebble-screen {
+      position: relative;
+      width: var(--pebble-screen-width);
+      height: var(--pebble-screen-height);
+      border-radius: 4px;
+      overflow: hidden;
+      background: #000;
+      border: 1px solid #1f2937;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .pebble-screen canvas {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+      background: #000;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .mono {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      font: 12px/1.45 Consolas, Monaco, monospace;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .notes {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .notes li + li {
+      margin-top: 6px;
+    }
+
+    .time-badge {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.78);
+      color: #fff;
+      font: 700 12px/1 "Segoe UI", sans-serif;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+    }
+
+    .legend {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 10px;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+    }
+
+    .legend-title {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+    }
+
+    .legend-subtitle {
+      margin: 10px 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .legend-row {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .legend-row + .legend-row {
+      margin-top: 6px;
+    }
+
+    .legend-swatch {
+      width: 34px;
+      height: 22px;
+      border-radius: 5px;
+      border: 1px solid rgba(15, 23, 42, 0.12);
+    }
+
+    .legend-swatch.dither {
+      background:
+        linear-gradient(45deg, #aaffff 25%, transparent 25%, transparent 75%, #aaffff 75%, #aaffff),
+        linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 75%, #ffffff 75%, #ffffff);
+      background-size: 8px 8px;
+      background-position: 0 0, 4px 4px;
+    }
+
+    .legend-palette {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .legend-chip {
+      min-height: 54px;
+      padding: 6px 4px;
+      border-radius: 8px;
+      border: 1px solid rgba(15, 23, 42, 0.12);
+      display: grid;
+      align-content: end;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.15;
+      text-align: center;
+      color: #0f172a;
+    }
+
+    .legend-chip.dark {
+      color: #ffffff;
+    }
+
+    .legend-note {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    @media (max-width: 960px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .viewer {
+        grid-template-columns: 1fr;
+      }
+
+      .wide {
+        grid-column: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Rain Radar Map Prototype</h1>
+    <p class="intro">
+      Browser-only experiment for validating the Pebble-targeted map/radar pipeline before translating it into PebbleKit JS.
+      It fetches the latest RainViewer frame, builds a sharper base map from OpenStreetMap tiles at <strong>mapZoom + 1</strong>,
+      restyles the basemap into a dark neutral palette, maps rain into fixed Pebble-safe intensity buckets, and crops a Pebble Time 2-sized
+      <strong>200 × 228</strong> window around the user.
+    </p>
+
+    <div class="grid">
+      <div class="panel">
+        <div id="protocolWarning" class="warning" style="display:none;"></div>
+
+        <div class="field">
+          <label for="framePath">RainViewer frame path</label>
+          <input id="framePath" value="" placeholder="/v2/radar/..." />
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="lat">Latitude</label>
+            <input id="lat" type="number" step="0.000001" value="54.623430" />
+          </div>
+          <div class="field">
+            <label for="lon">Longitude</label>
+            <input id="lon" type="number" step="0.000001" value="-1.302022" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="mapZoom">Map zoom</label>
+            <input id="mapZoom" type="number" min="0" max="18" value="9" />
+          </div>
+          <div class="field">
+            <label for="radarZoomCap">Radar zoom cap</label>
+            <input id="radarZoomCap" type="number" min="0" max="18" value="7" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="cropMode">Pebble crop</label>
+          <select id="cropMode">
+            <option value="standard" selected>Standard</option>
+            <option value="wide">Wide</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="mapStyle">Basemap style</label>
+          <select id="mapStyle">
+            <option value="carto_light_nolabels">CARTO Light No Labels</option>
+            <option value="carto_voyager_nolabels">CARTO Voyager No Labels</option>
+            <option value="stadia_alidade_smooth">Stadia Alidade Smooth</option>
+            <option value="osm_standard" selected>OSM Standard</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="mapDetailMode">Map detail</label>
+          <select id="mapDetailMode">
+            <option value="native" selected>Native</option>
+            <option value="sharper">Sharper (+1 zoom)</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="baseSize">Composite size</label>
+            <input id="baseSize" type="number" min="256" step="256" value="512" />
+          </div>
+          <div class="field">
+            <label for="mapWash">Map wash</label>
+            <input id="mapWash" type="number" min="0" max="1" step="0.05" value="0.55" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="radarColor">Radar color</label>
+            <input id="radarColor" type="number" min="0" max="6" value="2" />
+          </div>
+          <div class="field">
+            <label for="radarOptions">Radar options</label>
+            <input id="radarOptions" value="1_1" />
+          </div>
+        </div>
+
+        <div class="stack">
+          <button id="locateBtn" type="button">Use My Location</button>
+          <button id="latestBtn" type="button">Fetch Latest RainViewer Frame</button>
+          <button id="renderBtn" type="button">Render Prototype</button>
+          <button id="downloadBtn" class="secondary" type="button">Download Pebble Crop</button>
+        </div>
+
+        <div class="inline-actions">
+          <button id="toggleAnimBtn" type="button">Start Animation</button>
+          <button id="stepAnimBtn" class="secondary" type="button">Next Frame</button>
+        </div>
+
+        <label class="checkbox-row">
+          <input id="showCropBox" type="checkbox" checked />
+          Show Pebble crop box on composite
+        </label>
+        <label class="checkbox-row">
+          <input id="showRadar" type="checkbox" checked />
+          Show radar overlay
+        </label>
+        <div class="field">
+          <label for="pebblePreviewMode">Pebble preview</label>
+          <select id="pebblePreviewMode">
+            <option value="exact" selected>Exact 64-color</option>
+            <option value="dithered">64-color + ordered dithering</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <label class="checkbox-row">
+          <input id="enableAnimation" type="checkbox" />
+          Enable past-to-now radar animation
+        </label>
+
+        <div id="status" class="status"></div>
+
+        <div id="meta" class="meta"></div>
+
+        <div class="legend">
+          <div class="legend-title">Pebble Radar Mapping</div>
+          <div class="legend-palette">
+            <div class="legend-chip" style="background:#aaffff;">15-19<br>dBZ</div>
+            <div class="legend-chip" style="background:#00aaff;">20-29<br>dBZ</div>
+            <div class="legend-chip dark" style="background:#0055aa;">30-34<br>dBZ</div>
+            <div class="legend-chip" style="background:#ffff00;">35-39<br>dBZ</div>
+            <div class="legend-chip" style="background:#ffaa00;">40-49<br>dBZ</div>
+            <div class="legend-chip dark" style="background:#aa0000;">50+<br>dBZ</div>
+          </div>
+          <div class="legend-subtitle">Alpha Behaviour</div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#ffffff;"></div><div>`0-47`: hidden, no pixel drawn</div></div>
+          <div class="legend-row"><div class="legend-swatch dither"></div><div>`48-111`: light checker dither</div></div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#00aaff;"></div><div>`112-255`: solid fill using the bucket colour</div></div>
+          <div class="legend-subtitle">Bucket Mapping</div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#aaffff;"></div><div>15-19 dBZ maps to Pebble cyan</div></div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#00aaff;"></div><div>20-29 dBZ maps to Pebble light blue</div></div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#0055aa;"></div><div>30-34 dBZ maps to Pebble dark blue</div></div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#ffff00;"></div><div>35-39 dBZ maps to Pebble yellow</div></div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#ffaa00;"></div><div>40-49 dBZ maps to Pebble orange</div></div>
+          <div class="legend-row"><div class="legend-swatch" style="background:#aa0000;"></div><div>50+ dBZ maps to Pebble red</div></div>
+          <div class="legend-note">Alpha gate: `0-47` hidden, `48-111` checker dither, `112-255` solid fill. The displayed result depends on both dBZ and alpha.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="viewer">
+          <div class="viewer-block">
+            <label>High-res map source</label>
+            <canvas id="mapSourceCanvas" width="1024" height="1024"></canvas>
+          </div>
+          <div class="viewer-block">
+            <label>RainViewer centred image</label>
+            <div class="pixel-scroll">
+              <div class="canvas-wrap pixel-true">
+                <img id="radarPreview" alt="RainViewer centred image preview" />
+                <canvas id="radarSampleOverlay" class="overlay-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="viewer-block">
+            <label>Composite</label>
+            <div class="pixel-scroll">
+              <canvas id="compositeCanvas" class="pixel-true" width="512" height="512"></canvas>
+            </div>
+          </div>
+          <div class="viewer-block">
+            <label>Pebble crop</label>
+            <div class="pebble-preview">
+              <div class="pebble-inspector">
+                <div class="canvas-wrap">
+                  <canvas id="outputCanvas" width="200" height="228"></canvas>
+                  <div id="frameTimeBadge" class="time-badge" style="display:none;"></div>
+                </div>
+                <div class="pebble-inspector-note">2x pixel inspector of the 200 × 228 crop</div>
+              </div>
+              <div class="pebble-frame">
+                <div class="pebble-screen">
+                  <canvas id="watchMockCanvas" width="200" height="228"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="viewer-block wide">
+            <label>Exact OSM tile requests</label>
+            <div id="osmUrls" class="mono"></div>
+          </div>
+          <div class="viewer-block wide">
+            <label>Exact RainViewer request</label>
+            <div id="radarUrl" class="mono"></div>
+          </div>
+          <div class="viewer-block wide">
+            <label>Debug Overlay</label>
+            <div id="debugInfo" class="mono"></div>
+          </div>
+          <div class="viewer-block wide">
+            <label>Notes</label>
+            <ul class="notes">
+              <li>Current RainViewer docs describe the centred endpoint as <code>{path}/{size}/{z}/{lat}/{lon}/{color}/{options}.png</code>.</li>
+              <li>The radar layer is a single centred image, not tiled.</li>
+              <li>The map layer is built from OSM tiles at <code>mapZoom + 1</code>, then simplified into a dark neutral Pebble-style basemap.</li>
+              <li>The Pebble output is a centre crop from the larger composite; it is not scaled from a tiny source.</li>
+              <li>Rain colours are remapped to a fixed six-step Pebble palette so the basemap does not compete with precipitation.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PEBBLE_WIDTH = 200;
+    const PEBBLE_HEIGHT = 228;
+    const MAP_COLORS = {
+      water: [255, 255, 255],
+      land: [85, 170, 85],
+      detail: [170, 255, 170],
+      crosshair: [255, 255, 255]
+    };
+    const RAIN_COLORS = {
+      drizzle: [170, 255, 255],
+      light: [0, 170, 255],
+      moderate: [0, 85, 170],
+      heavy: [255, 255, 0],
+      intense: [255, 170, 0],
+      extreme: [170, 0, 0]
+    };
+    const UNIVERSAL_BLUE_KEYS = [
+      { dbz: 0, rgb: [130, 123, 105] },
+      { dbz: 5, rgb: [146, 136, 113] },
+      { dbz: 10, rgb: [206, 192, 135] },
+      { dbz: 15, rgb: [136, 221, 238] },
+      { dbz: 20, rgb: [0, 163, 224] },
+      { dbz: 25, rgb: [0, 119, 170] },
+      { dbz: 30, rgb: [0, 85, 136] },
+      { dbz: 35, rgb: [255, 238, 0] },
+      { dbz: 40, rgb: [255, 170, 0] },
+      { dbz: 45, rgb: [255, 68, 0] },
+      { dbz: 50, rgb: [193, 0, 0] },
+      { dbz: 55, rgb: [255, 170, 255] }
+    ];
+
+    const els = {
+      framePath: document.getElementById('framePath'),
+      lat: document.getElementById('lat'),
+      lon: document.getElementById('lon'),
+      mapZoom: document.getElementById('mapZoom'),
+      radarZoomCap: document.getElementById('radarZoomCap'),
+      cropMode: document.getElementById('cropMode'),
+      mapStyle: document.getElementById('mapStyle'),
+      mapDetailMode: document.getElementById('mapDetailMode'),
+      baseSize: document.getElementById('baseSize'),
+      mapWash: document.getElementById('mapWash'),
+      radarColor: document.getElementById('radarColor'),
+      radarOptions: document.getElementById('radarOptions'),
+      locateBtn: document.getElementById('locateBtn'),
+      latestBtn: document.getElementById('latestBtn'),
+      renderBtn: document.getElementById('renderBtn'),
+      downloadBtn: document.getElementById('downloadBtn'),
+      toggleAnimBtn: document.getElementById('toggleAnimBtn'),
+      stepAnimBtn: document.getElementById('stepAnimBtn'),
+      showCropBox: document.getElementById('showCropBox'),
+      showRadar: document.getElementById('showRadar'),
+      pebblePreviewMode: document.getElementById('pebblePreviewMode'),
+      enableAnimation: document.getElementById('enableAnimation'),
+      protocolWarning: document.getElementById('protocolWarning'),
+      status: document.getElementById('status'),
+      meta: document.getElementById('meta'),
+      mapSourceCanvas: document.getElementById('mapSourceCanvas'),
+      compositeCanvas: document.getElementById('compositeCanvas'),
+      outputCanvas: document.getElementById('outputCanvas'),
+      watchMockCanvas: document.getElementById('watchMockCanvas'),
+      radarSampleOverlay: document.getElementById('radarSampleOverlay'),
+      frameTimeBadge: document.getElementById('frameTimeBadge'),
+      radarPreview: document.getElementById('radarPreview'),
+      osmUrls: document.getElementById('osmUrls'),
+      radarUrl: document.getElementById('radarUrl'),
+      debugInfo: document.getElementById('debugInfo')
+    };
+
+    let lastFrameMeta = null;
+    let availableFrames = [];
+    let mapCache = null;
+    let animationState = {
+      playing: false,
+      timerId: null,
+      frameIndex: 0
+    };
+
+    function setStatus(message, isError = false) {
+      els.status.textContent = message;
+      els.status.className = `status${isError ? ' error' : ''}`;
+    }
+
+    function updateProtocolWarning() {
+      if (window.location.protocol === 'file:') {
+        els.protocolWarning.style.display = 'block';
+        els.protocolWarning.innerHTML =
+          'This page is running from <code>file://</code>, so OpenStreetMap may reject tile requests because there is no HTTP referrer. ' +
+          'Serve the folder locally instead, for example with <code>python3 -m http.server 8000</code>, then open ' +
+          '<code>http://localhost:8000/rainviewer_osm_overlay_test%20(6).html</code>.';
+      } else {
+        els.protocolWarning.style.display = 'none';
+      }
+    }
+
+    function getValues() {
+      const mapZoom = Number(els.mapZoom.value);
+      const radarZoomCap = Number(els.radarZoomCap.value);
+      const baseSize = Number(els.baseSize.value);
+      const cropMode = els.cropMode.value;
+      const cropScale = cropMode === 'wide' ? 2 : 1;
+      const cropWidth = PEBBLE_WIDTH * cropScale;
+      const cropHeight = PEBBLE_HEIGHT * cropScale;
+      const mapDetailMode = els.mapDetailMode.value;
+      const detailScale = mapDetailMode === 'sharper' ? 2 : 1;
+
+      return {
+        framePath: els.framePath.value.trim(),
+        lat: Number(els.lat.value),
+        lon: Number(els.lon.value),
+        mapZoom,
+        cropMode,
+        cropScale,
+        cropWidth,
+        cropHeight,
+        radarZoom: Math.min(mapZoom, radarZoomCap),
+        mapStyle: els.mapStyle.value,
+        mapDetailMode,
+        detailScale,
+        baseSize,
+        mapWash: Number(els.mapWash.value),
+        radarColor: Number(els.radarColor.value),
+        radarOptions: els.radarOptions.value.trim()
+      };
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function colorDistanceSq(r1, g1, b1, r2, g2, b2) {
+      const dr = r1 - r2;
+      const dg = g1 - g2;
+      const db = b1 - b2;
+      return (dr * dr) + (dg * dg) + (db * db);
+    }
+
+    function wrapX(x, z) {
+      const max = Math.pow(2, z);
+      return ((x % max) + max) % max;
+    }
+
+    function latLonToWorldPixels(lat, lon, zoom) {
+      const scale = 256 * Math.pow(2, zoom);
+      const x = ((lon + 180) / 360) * scale;
+      const sinLat = Math.sin((lat * Math.PI) / 180);
+      const y = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale;
+      return { x, y };
+    }
+
+    function worldPixelsToLatLon(x, y, zoom) {
+      const scale = 256 * Math.pow(2, zoom);
+      const lon = (x / scale) * 360 - 180;
+      const mercator = Math.PI * (1 - (2 * y / scale));
+      const lat = (Math.atan(Math.sinh(mercator)) * 180) / Math.PI;
+      return { lat, lon };
+    }
+
+    function getTileStyle(styleId) {
+      const styles = {
+        carto_light_nolabels: {
+          label: 'CARTO Light No Labels',
+          attribution: 'CARTO basemaps',
+          url: (z, x, y) => `https://basemaps.cartocdn.com/light_nolabels/${z}/${x}/${y}.png`
+        },
+        carto_voyager_nolabels: {
+          label: 'CARTO Voyager No Labels',
+          attribution: 'CARTO basemaps',
+          url: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/${z}/${x}/${y}.png`
+        },
+        stadia_alidade_smooth: {
+          label: 'Stadia Alidade Smooth @2x',
+          attribution: 'Stadia Maps',
+          url: (z, x, y) => `https://tiles.stadiamaps.com/tiles/alidade_smooth/${z}/${x}/${y}@2x.png`
+        },
+        osm_standard: {
+          label: 'OSM Standard',
+          attribution: 'OpenStreetMap',
+          url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+        }
+      };
+
+      return styles[styleId] || styles.carto_light_nolabels;
+    }
+
+    function buildMapTilePlan(lat, lon, mapZoom, sourceWidth, sourceHeight, mapStyleId, mapDetailMode) {
+      const hiZoom = mapDetailMode === 'sharper' ? mapZoom + 1 : mapZoom;
+      const tileStyle = getTileStyle(mapStyleId);
+      const center = latLonToWorldPixels(lat, lon, hiZoom);
+      const left = center.x - sourceWidth / 2;
+      const top = center.y - sourceHeight / 2;
+      const startTileX = Math.floor(left / 256);
+      const endTileX = Math.floor((left + sourceWidth - 1) / 256);
+      const startTileY = Math.floor(top / 256);
+      const endTileY = Math.floor((top + sourceHeight - 1) / 256);
+      const maxY = Math.pow(2, hiZoom) - 1;
+      const tiles = [];
+
+      for (let tileY = startTileY; tileY <= endTileY; tileY++) {
+        if (tileY < 0 || tileY > maxY) {
+          continue;
+        }
+        for (let tileX = startTileX; tileX <= endTileX; tileX++) {
+          tiles.push({
+            tileX,
+            tileY,
+            url: tileStyle.url(hiZoom, wrapX(tileX, hiZoom), tileY)
+          });
+        }
+      }
+
+      return { hiZoom, left, top, center, sourceWidth, sourceHeight, tiles, tileStyle };
+    }
+
+    function buildRadarUrl(framePath, size, radarZoom, lat, lon, color, options) {
+      return `https://tilecache.rainviewer.com${framePath}/${size}/${radarZoom}/${lat}/${lon}/${color}/${options}.png`;
+    }
+
+    function buildCoverageUrl(size, radarZoom, lat, lon) {
+      return `https://tilecache.rainviewer.com/v2/coverage/0/${size}/${radarZoom}/${lat}/${lon}/0/0_0.png`;
+    }
+
+    function loadImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to load ${url}`));
+        img.src = url;
+      });
+    }
+
+    async function loadRadarOrCoverage(radarUrl, coverageUrl) {
+      try {
+        const radarImg = await loadImage(radarUrl);
+        return {
+          image: radarImg,
+          mode: 'radar',
+          warning: ''
+        };
+      } catch (error) {
+        const coverageImg = await loadImage(coverageUrl);
+        return {
+          image: coverageImg,
+          mode: 'coverage',
+          warning: 'RainViewer radar image returned 404 in Chrome, using coverage mask fallback.'
+        };
+      }
+    }
+
+    async function fetchLatestFrame() {
+      setStatus('Fetching latest RainViewer frame...');
+      const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+      if (!response.ok) {
+        throw new Error(`RainViewer API returned ${response.status}`);
+      }
+
+      const json = await response.json();
+      if (!json.radar || !json.radar.past || !json.radar.past.length) {
+        throw new Error('No RainViewer radar frames returned');
+      }
+
+      availableFrames = json.radar.past.slice();
+      const frame = availableFrames[availableFrames.length - 1];
+      lastFrameMeta = {
+        path: frame.path,
+        host: json.host,
+        generated: json.generated,
+        frameTime: frame.time
+      };
+      els.framePath.value = frame.path;
+      setStatus(`Loaded latest frame ${frame.path}`);
+      renderMeta();
+      return lastFrameMeta;
+    }
+
+    function renderMeta(extra = {}) {
+      const values = getValues();
+      const parts = [
+        `Basemap: ${getTileStyle(values.mapStyle).label}`,
+        `Map detail: ${values.mapDetailMode === 'sharper' ? 'Sharper (+1 zoom)' : 'Native'}`,
+        `Base map zoom: ${values.mapZoom}`,
+        `Pebble crop mode: ${values.cropMode === 'wide' ? 'Wide' : 'Standard'}`,
+        `Scene render: ${values.baseSize} × ${values.baseSize}`,
+        `Crop window: ${values.cropWidth} × ${values.cropHeight}`,
+        `Radar zoom: ${values.radarZoom}`,
+        `Composite: ${values.baseSize} × ${values.baseSize}`,
+        `Pebble crop: ${PEBBLE_WIDTH} × ${PEBBLE_HEIGHT}`,
+        `Lat/Lon endpoint order: ${values.lat}, ${values.lon}`
+      ];
+
+      if (lastFrameMeta) {
+        parts.push(`Frame path: ${lastFrameMeta.path}`);
+        parts.push(`Frame time (local): ${new Date(lastFrameMeta.frameTime * 1000).toLocaleString()}`);
+      }
+
+      if (availableFrames.length) {
+        parts.push(`Available past frames: ${availableFrames.length}`);
+      }
+
+      if (extra.tileCount !== undefined) {
+        parts.push(`OSM tile count: ${extra.tileCount}`);
+      }
+
+      if (extra.hiZoom !== undefined) {
+        parts.push(`High-detail OSM zoom: ${extra.hiZoom}`);
+      }
+
+      if (extra.tileProvider) {
+        parts.push(`Tile provider: ${extra.tileProvider}`);
+      }
+
+      els.meta.innerHTML = parts.join('<br>');
+    }
+
+    function formatFrameTime(unixSeconds) {
+      if (!unixSeconds) {
+        return '';
+      }
+
+      const date = new Date(unixSeconds * 1000);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    function updateFrameTimeBadge(unixSeconds) {
+      const text = formatFrameTime(unixSeconds);
+      if (!text) {
+        els.frameTimeBadge.textContent = '';
+        els.frameTimeBadge.style.display = 'none';
+        return;
+      }
+
+      els.frameTimeBadge.textContent = text;
+      els.frameTimeBadge.style.display = 'block';
+    }
+
+    async function useMyLocation() {
+      setStatus('Requesting browser location...');
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 60000
+        });
+      });
+
+      els.lat.value = position.coords.latitude.toFixed(6);
+      els.lon.value = position.coords.longitude.toFixed(6);
+      setStatus('Location updated');
+      renderMeta();
+    }
+
+    function drawMapSource(plan, tileImages) {
+      const canvas = els.mapSourceCanvas;
+      canvas.width = plan.sourceWidth;
+      canvas.height = plan.sourceHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, plan.sourceWidth, plan.sourceHeight);
+
+      tileImages.forEach(({ tile, image }) => {
+        const worldX = tile.tileX * 256;
+        const worldY = tile.tileY * 256;
+        const drawX = worldX - plan.left;
+        const drawY = worldY - plan.top;
+        ctx.drawImage(image, drawX, drawY, 256, 256);
+      });
+    }
+
+    async function prepareStaticMap(values) {
+      const sourceWidth = values.baseSize * values.detailScale;
+      const sourceHeight = values.baseSize * values.detailScale;
+      const plan = buildMapTilePlan(
+        values.lat,
+        values.lon,
+        values.mapZoom,
+        sourceWidth,
+        sourceHeight,
+        values.mapStyle,
+        values.mapDetailMode
+      );
+      const tileImages = await Promise.all(plan.tiles.map(async (tile) => ({
+        tile,
+        image: await loadImage(tile.url)
+      })));
+
+      drawMapSource(plan, tileImages);
+      els.osmUrls.textContent = plan.tiles.map((tile) => tile.url).join('\n');
+      renderMeta({
+        tileCount: plan.tiles.length,
+        hiZoom: plan.hiZoom,
+        tileProvider: plan.tileStyle.attribution
+      });
+
+      mapCache = {
+        values: {
+          lat: values.lat,
+          lon: values.lon,
+          mapZoom: values.mapZoom,
+          cropMode: values.cropMode,
+          cropScale: values.cropScale,
+          cropWidth: values.cropWidth,
+          cropHeight: values.cropHeight,
+          detailScale: values.detailScale,
+          baseSize: values.baseSize,
+          mapStyle: values.mapStyle,
+          mapDetailMode: values.mapDetailMode
+        },
+        plan
+      };
+
+      return plan;
+    }
+
+    function drawComposite(baseSize, mapWash, radarImg, mapZoom, radarZoom, showCropBox, overlayMode) {
+      const compositeCanvas = els.compositeCanvas;
+      compositeCanvas.width = baseSize;
+      compositeCanvas.height = baseSize;
+      const ctx = compositeCanvas.getContext('2d');
+      ctx.clearRect(0, 0, baseSize, baseSize);
+
+      const values = getValues();
+      const cropLeft = (baseSize - values.cropWidth) / 2;
+      const cropTop = (baseSize - values.cropHeight) / 2;
+
+      ctx.drawImage(
+        els.mapSourceCanvas,
+        0, 0, els.mapSourceCanvas.width, els.mapSourceCanvas.height,
+        0, 0, baseSize, baseSize
+      );
+
+      const zoomScale = Math.pow(2, mapZoom - radarZoom);
+      const scaledRadarSize = baseSize * zoomScale;
+      const radarLeft = (baseSize - scaledRadarSize) / 2;
+      const radarTop = (baseSize - scaledRadarSize) / 2;
+      const sx = ((0 - radarLeft) / scaledRadarSize) * radarImg.width;
+      const sy = ((0 - radarTop) / scaledRadarSize) * radarImg.height;
+      const sw = (baseSize / scaledRadarSize) * radarImg.width;
+      const sh = (baseSize / scaledRadarSize) * radarImg.height;
+      drawRadarSampleOverlay(radarImg, sx, sy, sw, sh, overlayMode);
+      const imageData = ctx.getImageData(0, 0, baseSize, baseSize);
+      const data = imageData.data;
+
+      applyPebbleMapStyle(data);
+
+      if (els.showRadar.checked && overlayMode === 'coverage') {
+        overlayCoverageMask(data, baseSize, 0, 0, baseSize, baseSize);
+      } else if (els.showRadar.checked) {
+        const radarCanvas = document.createElement('canvas');
+        radarCanvas.width = baseSize;
+        radarCanvas.height = baseSize;
+        const radarCtx = radarCanvas.getContext('2d');
+        radarCtx.drawImage(
+          radarImg,
+          sx, sy, sw, sh,
+          0, 0, baseSize, baseSize
+        );
+
+        const radarData = radarCtx.getImageData(0, 0, baseSize, baseSize).data;
+        overlayRainBuckets(data, radarData, baseSize, 0, 0, baseSize, baseSize);
+      }
+
+      const cx = baseSize / 2;
+      const cy = baseSize / 2;
+      drawCrosshairIntoBuffer(data, baseSize, baseSize, cx, cy);
+      ctx.putImageData(imageData, 0, 0);
+
+      if (showCropBox) {
+        ctx.save();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = Math.max(2, baseSize / 256);
+        ctx.setLineDash([8, 6]);
+        ctx.strokeRect(cropLeft, cropTop, values.cropWidth, values.cropHeight);
+        ctx.restore();
+      }
+    }
+
+    function drawRadarSampleOverlay(radarImg, sx, sy, sw, sh, overlayMode) {
+      const canvas = els.radarSampleOverlay;
+      canvas.width = radarImg.width;
+      canvas.height = radarImg.height;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const left = Math.max(0, sx);
+      const top = Math.max(0, sy);
+      const right = Math.min(canvas.width, sx + sw);
+      const bottom = Math.min(canvas.height, sy + sh);
+      const width = Math.max(0, right - left);
+      const height = Math.max(0, bottom - top);
+
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+      ctx.fillRect(left, top, width, height);
+
+      ctx.strokeStyle = overlayMode === 'coverage' ? '#2563eb' : '#ef4444';
+      ctx.lineWidth = Math.max(2, canvas.width / 256);
+      ctx.setLineDash([10, 6]);
+      ctx.strokeRect(left, top, width, height);
+      ctx.setLineDash([]);
+
+      const cx = left + (width / 2);
+      const cy = top + (height / 2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 10, cy);
+      ctx.lineTo(cx + 10, cy);
+      ctx.moveTo(cx, cy - 10);
+      ctx.lineTo(cx, cy + 10);
+      ctx.stroke();
+    }
+
+    function applyPebbleMapStyle(data) {
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+        const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+        let target;
+
+        if ((b > 150 && b >= g + 8 && b >= r + 20) || (b > 180 && g > 180 && r < 210)) {
+          target = MAP_COLORS.water;
+        } else if (luminance > 205 || chroma < 16) {
+          target = MAP_COLORS.land;
+        } else if (g >= r - 8 && g >= b + 12 && luminance > 140) {
+          target = MAP_COLORS.detail;
+        } else if (r > 210 && g > 210 && b < 225) {
+          target = MAP_COLORS.detail;
+        } else {
+          target = MAP_COLORS.land;
+        }
+
+        data[i] = target[0];
+        data[i + 1] = target[1];
+        data[i + 2] = target[2];
+        data[i + 3] = 255;
+      }
+    }
+
+    function radarBucketForPixel(r, g, b, alpha) {
+      if (alpha < 48) {
+        return null;
+      }
+
+      let bestDbz = null;
+      let bestDistance = Infinity;
+
+      UNIVERSAL_BLUE_KEYS.forEach((sample) => {
+        const distance = colorDistanceSq(
+          r, g, b,
+          sample.rgb[0], sample.rgb[1], sample.rgb[2]
+        );
+
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestDbz = sample.dbz;
+        }
+      });
+
+      if (bestDbz === null || bestDbz < 15) {
+        return null;
+      }
+
+      var color;
+      if (bestDbz < 20) {
+        color = RAIN_COLORS.drizzle;
+      } else if (bestDbz < 30) {
+        color = RAIN_COLORS.light;
+      } else if (bestDbz < 35) {
+        color = RAIN_COLORS.moderate;
+      } else if (bestDbz < 40) {
+        color = RAIN_COLORS.heavy;
+      } else if (bestDbz < 50) {
+        color = RAIN_COLORS.intense;
+      } else {
+        color = RAIN_COLORS.extreme;
+      }
+
+      return {
+        color: color,
+        dbz: bestDbz,
+        alpha: alpha,
+        dither: alpha < 112
+      };
+    }
+
+    function overlayRainBuckets(baseData, radarData, baseWidth, offsetX, offsetY, width, height) {
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const radarIndex = (y * width + x) * 4;
+          const rainSample = radarBucketForPixel(
+            radarData[radarIndex],
+            radarData[radarIndex + 1],
+            radarData[radarIndex + 2],
+            radarData[radarIndex + 3]
+          );
+
+          if (!rainSample) {
+            continue;
+          }
+
+          if (rainSample.dither && ((x + y) % 2 === 1)) {
+            continue;
+          }
+
+          const baseIndex = (((offsetY + y) * baseWidth) + offsetX + x) * 4;
+          baseData[baseIndex] = rainSample.color[0];
+          baseData[baseIndex + 1] = rainSample.color[1];
+          baseData[baseIndex + 2] = rainSample.color[2];
+          baseData[baseIndex + 3] = 255;
+        }
+      }
+    }
+
+    function overlayCoverageMask(baseData, baseWidth, offsetX, offsetY, width, height) {
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const baseIndex = (((offsetY + y) * baseWidth) + offsetX + x) * 4;
+          baseData[baseIndex] = RAIN_COLORS.light[0];
+          baseData[baseIndex + 1] = RAIN_COLORS.light[1];
+          baseData[baseIndex + 2] = RAIN_COLORS.light[2];
+          baseData[baseIndex + 3] = 255;
+        }
+      }
+    }
+
+    function drawCrosshairIntoBuffer(data, width, height, cx, cy) {
+      function paint(x, y) {
+        if (x < 0 || x >= width || y < 0 || y >= height) {
+          return;
+        }
+
+        const index = (y * width + x) * 4;
+        data[index] = MAP_COLORS.crosshair[0];
+        data[index + 1] = MAP_COLORS.crosshair[1];
+        data[index + 2] = MAP_COLORS.crosshair[2];
+        data[index + 3] = 255;
+      }
+
+      for (let delta = -6; delta <= 6; delta += 1) {
+        paint(Math.floor(cx) + delta, Math.floor(cy));
+        paint(Math.floor(cx), Math.floor(cy) + delta);
+      }
+    }
+
+    function drawPebbleCrop(baseSize) {
+      const outputCanvas = els.outputCanvas;
+      outputCanvas.width = PEBBLE_WIDTH;
+      outputCanvas.height = PEBBLE_HEIGHT;
+      const ctx = outputCanvas.getContext('2d');
+      ctx.clearRect(0, 0, PEBBLE_WIDTH, PEBBLE_HEIGHT);
+
+      const values = getValues();
+      const left = (baseSize - values.cropWidth) / 2;
+      const top = (baseSize - values.cropHeight) / 2;
+
+      ctx.drawImage(
+        els.compositeCanvas,
+        left, top, values.cropWidth, values.cropHeight,
+        0, 0, PEBBLE_WIDTH, PEBBLE_HEIGHT
+      );
+
+      if (els.pebblePreviewMode.value === 'exact') {
+        quantizeCanvasToPebblePalette(outputCanvas);
+      } else if (els.pebblePreviewMode.value === 'dithered') {
+        ditherCanvasToPebblePalette(outputCanvas);
+      }
+
+      const watchCtx = els.watchMockCanvas.getContext('2d');
+      els.watchMockCanvas.width = PEBBLE_WIDTH;
+      els.watchMockCanvas.height = PEBBLE_HEIGHT;
+      watchCtx.clearRect(0, 0, PEBBLE_WIDTH, PEBBLE_HEIGHT);
+      watchCtx.drawImage(outputCanvas, 0, 0);
+    }
+
+    function quantizeChannelToPebble(value) {
+      return Math.round(value / 85) * 85;
+    }
+
+    function ditherChannelToPebble(value, thresholdOffset) {
+      const level = Math.max(0, Math.min(3, Math.floor((value + thresholdOffset) / 64)));
+      return level * 85;
+    }
+
+    function quantizeCanvasToPebblePalette(canvas) {
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = quantizeChannelToPebble(data[i]);
+        data[i + 1] = quantizeChannelToPebble(data[i + 1]);
+        data[i + 2] = quantizeChannelToPebble(data[i + 2]);
+        data[i + 3] = data[i + 3] < 128 ? 0 : 255;
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function ditherCanvasToPebblePalette(canvas) {
+      const bayer4 = [
+        [0, 8, 2, 10],
+        [12, 4, 14, 6],
+        [3, 11, 1, 9],
+        [15, 7, 13, 5]
+      ];
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      for (let y = 0; y < canvas.height; y += 1) {
+        for (let x = 0; x < canvas.width; x += 1) {
+          const i = (y * canvas.width + x) * 4;
+          const thresholdOffset = ((bayer4[y % 4][x % 4] / 16) - 0.5) * 64;
+
+          data[i] = ditherChannelToPebble(data[i], thresholdOffset);
+          data[i + 1] = ditherChannelToPebble(data[i + 1], thresholdOffset);
+          data[i + 2] = ditherChannelToPebble(data[i + 2], thresholdOffset);
+          data[i + 3] = data[i + 3] < 128 ? 0 : 255;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function renderDebugInfo(values) {
+      const zoomScale = Math.pow(2, values.mapZoom - values.radarZoom);
+      const compositeLeft = (values.baseSize - values.cropWidth) / 2;
+      const compositeTop = (values.baseSize - values.cropHeight) / 2;
+      const scaledRadarSize = values.baseSize * zoomScale;
+      const radarLeft = (values.baseSize - scaledRadarSize) / 2;
+      const radarTop = (values.baseSize - scaledRadarSize) / 2;
+      const radarSampleLeft = ((compositeLeft - radarLeft) / scaledRadarSize) * values.baseSize;
+      const radarSampleTop = ((compositeTop - radarTop) / scaledRadarSize) * values.baseSize;
+      const radarSampleWidth = (values.cropWidth / scaledRadarSize) * values.baseSize;
+      const radarSampleHeight = (values.cropHeight / scaledRadarSize) * values.baseSize;
+      const topLeft = worldPixelsToLatLon(
+        latLonToWorldPixels(values.lat, values.lon, values.mapZoom).x - (values.baseSize / 2) + compositeLeft,
+        latLonToWorldPixels(values.lat, values.lon, values.mapZoom).y - (values.baseSize / 2) + compositeTop,
+        values.mapZoom
+      );
+      const bottomRight = worldPixelsToLatLon(
+        latLonToWorldPixels(values.lat, values.lon, values.mapZoom).x - (values.baseSize / 2) + compositeLeft + values.cropWidth,
+        latLonToWorldPixels(values.lat, values.lon, values.mapZoom).y - (values.baseSize / 2) + compositeTop + values.cropHeight,
+        values.mapZoom
+      );
+
+      els.debugInfo.textContent = [
+        `baseMapZoom=${values.mapZoom}`,
+        `mapDetailMode=${values.mapDetailMode}`,
+        `cropMode=${values.cropMode}`,
+        `sceneRender=${values.baseSize}x${values.baseSize}`,
+        `cropWindow=${values.cropWidth}x${values.cropHeight}`,
+        `radarZoom=${values.radarZoom}`,
+        `radarScale=2^(${values.mapZoom} - ${values.radarZoom}) = ${zoomScale.toFixed(2)}x`,
+        `radarSampleRect=${radarSampleLeft.toFixed(1)},${radarSampleTop.toFixed(1)} ${radarSampleWidth.toFixed(1)}x${radarSampleHeight.toFixed(1)}`,
+        `composite=${values.baseSize}x${values.baseSize}`,
+        `pebbleCrop=${PEBBLE_WIDTH}x${PEBBLE_HEIGHT}`,
+        `cropTopLeft=${topLeft.lat.toFixed(5)}, ${topLeft.lon.toFixed(5)}`,
+        `cropBottomRight=${bottomRight.lat.toFixed(5)}, ${bottomRight.lon.toFixed(5)}`,
+        `cropLatSpan=${Math.abs(topLeft.lat - bottomRight.lat).toFixed(5)}`,
+        `cropLonSpan=${Math.abs(bottomRight.lon - topLeft.lon).toFixed(5)}`
+      ].join('\n');
+    }
+
+    function stopAnimation() {
+      if (animationState.timerId) {
+        clearInterval(animationState.timerId);
+        animationState.timerId = null;
+      }
+
+      animationState.playing = false;
+      els.toggleAnimBtn.textContent = 'Start Animation';
+    }
+
+    async function renderFrameFromPath(framePath, frameTime, statusMessage) {
+      const values = getValues();
+
+      if (!mapCache ||
+          mapCache.values.lat !== values.lat ||
+          mapCache.values.lon !== values.lon ||
+          mapCache.values.mapZoom !== values.mapZoom ||
+          mapCache.values.cropMode !== values.cropMode ||
+          mapCache.values.cropScale !== values.cropScale ||
+          mapCache.values.cropWidth !== values.cropWidth ||
+          mapCache.values.cropHeight !== values.cropHeight ||
+          mapCache.values.detailScale !== values.detailScale ||
+          mapCache.values.baseSize !== values.baseSize ||
+          mapCache.values.mapStyle !== values.mapStyle ||
+          mapCache.values.mapDetailMode !== values.mapDetailMode) {
+        await prepareStaticMap(values);
+      }
+
+      const radarUrl = buildRadarUrl(
+        framePath,
+        values.baseSize,
+        values.radarZoom,
+        values.lat,
+        values.lon,
+        values.radarColor,
+        values.radarOptions
+      );
+      const coverageUrl = buildCoverageUrl(
+        values.baseSize,
+        values.radarZoom,
+        values.lat,
+        values.lon
+      );
+
+      els.radarUrl.textContent = radarUrl;
+      setStatus(statusMessage);
+
+      const overlayResult = await loadRadarOrCoverage(radarUrl, coverageUrl);
+      els.radarPreview.src = overlayResult.mode === 'radar' ? radarUrl : coverageUrl;
+      drawComposite(
+        values.baseSize,
+        clamp(values.mapWash, 0, 1),
+        overlayResult.image,
+        values.mapZoom,
+        values.radarZoom,
+        els.showCropBox.checked,
+        overlayResult.mode
+      );
+      drawPebbleCrop(values.baseSize);
+      renderDebugInfo(values);
+      updateFrameTimeBadge(frameTime);
+
+      setStatus(overlayResult.warning || 'Render complete', overlayResult.mode !== 'radar');
+    }
+
+    async function stepAnimationFrame() {
+      if (!availableFrames.length) {
+        await fetchLatestFrame();
+      }
+
+      const frame = availableFrames[animationState.frameIndex];
+      animationState.frameIndex = (animationState.frameIndex + 1) % availableFrames.length;
+      lastFrameMeta = {
+        ...(lastFrameMeta || {}),
+        path: frame.path,
+        frameTime: frame.time
+      };
+      els.framePath.value = frame.path;
+      renderMeta({
+        tileCount: mapCache?.plan?.tiles.length,
+        hiZoom: mapCache?.plan?.hiZoom
+      });
+
+      await renderFrameFromPath(frame.path, frame.time, `Rendering frame ${formatFrameTime(frame.time)}...`);
+    }
+
+    function startAnimation() {
+      stopAnimation();
+      animationState.playing = true;
+      els.toggleAnimBtn.textContent = 'Stop Animation';
+
+      stepAnimationFrame().catch((error) => {
+        stopAnimation();
+        setStatus(error.message || 'Animation frame failed', true);
+      });
+
+      animationState.timerId = setInterval(() => {
+        stepAnimationFrame().catch((error) => {
+          stopAnimation();
+          setStatus(error.message || 'Animation frame failed', true);
+        });
+      }, 700);
+    }
+
+    async function render() {
+      const values = getValues();
+
+      if (!values.framePath.startsWith('/')) {
+        throw new Error('RainViewer frame path must start with /');
+      }
+
+      if (!Number.isFinite(values.lat) || !Number.isFinite(values.lon)) {
+        throw new Error('Latitude and longitude must be valid numbers');
+      }
+
+      if (!Number.isFinite(values.mapZoom) || values.mapZoom < 0) {
+        throw new Error('Map zoom must be a valid non-negative number');
+      }
+
+      await prepareStaticMap(values);
+
+      if (els.enableAnimation.checked) {
+        animationState.frameIndex = 0;
+        await stepAnimationFrame();
+      } else {
+        stopAnimation();
+        await renderFrameFromPath(
+          values.framePath,
+          lastFrameMeta?.frameTime,
+          `Loading ${mapCache.plan.tiles.length} OSM tiles and centred radar image...`
+        );
+      }
+    }
+
+    function downloadOutput() {
+      const link = document.createElement('a');
+      link.href = els.outputCanvas.toDataURL('image/png');
+      link.download = 'pebble-rain-radar-crop.png';
+      link.click();
+    }
+
+    els.locateBtn.addEventListener('click', async () => {
+      try {
+        await useMyLocation();
+      } catch (error) {
+        setStatus(error.message || 'Location lookup failed', true);
+      }
+    });
+
+    els.latestBtn.addEventListener('click', async () => {
+      try {
+        await fetchLatestFrame();
+      } catch (error) {
+        setStatus(error.message || 'Failed to fetch RainViewer frame', true);
+      }
+    });
+
+    els.renderBtn.addEventListener('click', async () => {
+      try {
+        await render();
+      } catch (error) {
+        setStatus(error.message || 'Render failed', true);
+      }
+    });
+
+    els.downloadBtn.addEventListener('click', downloadOutput);
+
+    els.toggleAnimBtn.addEventListener('click', async () => {
+      try {
+        if (animationState.playing) {
+          stopAnimation();
+          setStatus('Animation stopped');
+          return;
+        }
+
+        els.enableAnimation.checked = true;
+        if (!mapCache) {
+          await render();
+        }
+        startAnimation();
+      } catch (error) {
+        stopAnimation();
+        setStatus(error.message || 'Failed to start animation', true);
+      }
+    });
+
+    els.stepAnimBtn.addEventListener('click', async () => {
+      try {
+        stopAnimation();
+        els.enableAnimation.checked = true;
+        if (!mapCache) {
+          await render();
+        } else {
+          await stepAnimationFrame();
+        }
+      } catch (error) {
+        setStatus(error.message || 'Failed to advance frame', true);
+      }
+    });
+
+    els.enableAnimation.addEventListener('change', () => {
+      if (!els.enableAnimation.checked) {
+        stopAnimation();
+      }
+    });
+
+    els.pebblePreviewMode.addEventListener('change', async () => {
+      try {
+        await render();
+      } catch (error) {
+        setStatus(error.message || 'Render failed', true);
+      }
+    });
+
+    els.showRadar.addEventListener('change', async () => {
+      try {
+        await render();
+      } catch (error) {
+        setStatus(error.message || 'Render failed', true);
+      }
+    });
+
+    renderMeta();
+    updateProtocolWarning();
+    fetchLatestFrame().catch((error) => {
+      setStatus(error.message || 'Failed to fetch latest RainViewer frame', true);
+    });
+  </script>
+</body>
+</html>
