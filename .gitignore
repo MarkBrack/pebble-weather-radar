@@ -1,0 +1,12 @@
+# Pebble / waf build output
+build/
+.lock-waf_linux_build
+.wafpickle-*
+
+# Local tool markers
+.codex
+
+# Node / editor noise
+node_modules/
+.DS_Store
+Thumbs.db
