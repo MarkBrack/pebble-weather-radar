@@ -1,7 +1,7 @@
 {
   "name": "rain-radar",
-  "author": "OpenAI",
-  "version": "0.1.0",
+  "author": "Mark Brackenborough",
+  "version": "1.0.0",
   "keywords": ["pebble-app"],
   "private": true,
   "dependencies": {},
