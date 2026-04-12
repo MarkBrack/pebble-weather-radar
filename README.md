@@ -9,9 +9,8 @@ A rain radar app for the **Pebble Time 2 (Emery)** smartwatch. It displays a liv
 - **Live rain radar** from [RainViewer](https://www.rainviewer.com/) overlaid on OpenStreetMap tiles
 - **Multiple time steps** — stores up to 8 recent radar frames on the watch for animation
 - **Frame navigation** — use the Up/Down buttons to step through past and nowcast radar frames
-- **Two crop modes** — Wide (full display) and Standard (square crop), toggled with Select
-- **Frame position indicator** — shows current frame number when multiple frames are loaded
-- **Automatic refresh** every 4 minutes
+- **Two crop modes** — Wide (zoom  out) and Standard (zoomed in), toggled with Select
+- **Frame position indicator** — shows current frame when multiple frames are loaded
 
 ## Target Hardware
 
