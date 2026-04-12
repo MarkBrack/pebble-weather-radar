@@ -2,6 +2,8 @@
 
 A rain radar app for the **Pebble Time 2 (Emery)** smartwatch. It displays a live rain radar overlay on top of an OpenStreetMap base map, centred on your location.
 
+![Rain Radar in action](radar-gif.gif)
+
 ## Features
 
 - **Live rain radar** from [RainViewer](https://www.rainviewer.com/) overlaid on OpenStreetMap tiles

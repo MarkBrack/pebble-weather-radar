@@ -434,9 +434,16 @@ function drawCrosshairIntoBuffer(data, width, height) {
     data[index + 3] = 255;
   }
 
-  for (delta = -6; delta <= 6; delta++) {
+  for (delta = -10; delta <= 10; delta++) {
     paint(cx + delta, cy);
     paint(cx, cy + delta);
+  }
+  // Thicken the crosshair (2px wide arms)
+  for (delta = -10; delta <= 10; delta++) {
+    paint(cx + delta, cy - 1);
+    paint(cx + delta, cy + 1);
+    paint(cx - 1, cy + delta);
+    paint(cx + 1, cy + delta);
   }
 }
 

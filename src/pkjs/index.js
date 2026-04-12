@@ -10,8 +10,8 @@ var DEFAULT_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Linux; PebbleKitJS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
 };
 var HARDCODED_LOCATION = {
-  latitude: 54.623,
-  longitude: -1.302
+  latitude: 21.307,
+  longitude: -157.858
 };
 
 var refreshInFlight = false;
@@ -83,7 +83,21 @@ function reportStatus(message) {
 }
 
 function getLocation() {
-  return Promise.resolve(HARDCODED_LOCATION);
+  return new Promise(function(resolve) {
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        });
+      },
+      function() {
+        console.log('GPS failed, using fallback location');
+        resolve(HARDCODED_LOCATION);
+      },
+      { timeout: 10000, maximumAge: 300000 }
+    );
+  });
 }
 
 function normalizeRequest(payload) {

@@ -77,10 +77,6 @@ let backButton;
 let upButton;
 let downButton;
 
-function cropLabel() {
-	return state.cropMode === CROP_WIDE ? "Wide" : "Std";
-}
-
 function drawStatus(text) {
 	const safe = text || "";
 	const textWidth = render.getTextWidth(safe, statusFont);
@@ -92,16 +88,25 @@ function drawStatus(text) {
 	render.drawText(safe, statusFont, STATUS_FG, x + 9, y + 4);
 }
 
-function drawFrameIndicator() {
-	if (state.radarFrames.length <= 1) return;
-	const text = (state.currentFrame + 1) + "/" + state.radarFrames.length;
-	const textWidth = render.getTextWidth(text, statusFont);
-	const boxWidth = textWidth + 10;
-	const boxHeight = 22;
-	const x = DISPLAY_WIDTH - boxWidth - 2;
-	const y = DISPLAY_HEIGHT - boxHeight - 2;
-	render.fillRectangle(STATUS_BG, x, y, boxWidth, boxHeight);
-	render.drawText(text, statusFont, STATUS_FG, x + 5, y);
+const DOT_RADIUS = 3;
+const DOT_SPACING = 10;
+const DOT_COLOR_ACTIVE = 0b11000000;   // black
+const DOT_COLOR_INACTIVE = 0b11101010; // grey (r2 g2 b2)
+const DOT_Y = DISPLAY_HEIGHT - 8;
+
+function drawPageDots() {
+	const count = state.radarFrames.length;
+	if (count <= 1) return;
+	const totalWidth = (count - 1) * DOT_SPACING;
+	const startX = Math.floor((DISPLAY_WIDTH - totalWidth) / 2);
+	for (let i = 0; i < count; i++) {
+		const color = (i === state.currentFrame) ? DOT_COLOR_ACTIVE : DOT_COLOR_INACTIVE;
+		const cx = startX + (i * DOT_SPACING);
+		// Draw a filled circle approximation using filled rectangles
+		render.fillRectangle(color, cx - 3, DOT_Y - 1, 7, 3);
+		render.fillRectangle(color, cx - 2, DOT_Y - 2, 5, 5);
+		render.fillRectangle(color, cx - 1, DOT_Y - 3, 3, 7);
+	}
 }
 
 function compositeFrame() {
@@ -128,8 +133,8 @@ function compositeFrame() {
 		}
 	}
 
-	// 3. Draw frame position indicator
-	drawFrameIndicator();
+	// 3. Draw page dots
+	drawPageDots();
 
 	render.end();
 	state.frameReady = true;
@@ -138,17 +143,22 @@ function compositeFrame() {
 
 function setStatus(text) {
 	state.statusText = text || "";
-	if (state.frameReady) return; // don't overwrite displayed frame
+	if (state.frameReady && text !== "Zooming in" && text !== "Zooming out") return;
 	render.begin();
-	render.fillRectangle(0xC0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-	drawStatus(state.statusText);
+	if (state.frameReady) {
+		// Overlay status on existing frame
+		drawStatus(state.statusText);
+	} else {
+		render.fillRectangle(0xC0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+		drawStatus(state.statusText);
+	}
 	render.end();
 }
 
-function queueFrameRequest() {
+function queueFrameRequest(zoomLabel) {
 	state.pendingRequest = true;
 	state.frameReady = false;
-	setStatus(cropLabel() + "...");
+	setStatus(zoomLabel || "Loading...");
 	if (state.canWrite) {
 		flushFrameRequest();
 	}
@@ -190,7 +200,6 @@ function beginBg(map) {
 	state.radarFrameCount = 0;
 	state.currentFrame = 0;
 	state.frameReady = false;
-	setStatus("Map...");
 }
 
 function handleBgChunk(map) {
@@ -226,7 +235,6 @@ function beginRadar(map) {
 		received: 0,
 		chunks: []
 	};
-	setStatus("Rain " + (index + 1) + "/" + count);
 }
 
 function handleRadarChunk(map) {
@@ -323,7 +331,7 @@ function handleButton(pushed, which) {
 						onPush: handleButton
 					});
 				}
-				queueFrameRequest();
+				queueFrameRequest("Zooming in");
 			}
 			break;
 		case "back":
@@ -333,7 +341,7 @@ function handleButton(pushed, which) {
 					backButton.close();
 					backButton = null;
 				}
-				queueFrameRequest();
+				queueFrameRequest("Zooming out");
 			}
 			break;
 		case "up":
@@ -358,7 +366,7 @@ function handleButton(pushed, which) {
 
 console.log("Rain Radar Alloy runtime active.");
 
-setStatus("Connecting...");
+setStatus("Loading...");
 
 message = new Message({
 	keys: MESSAGE_KEYS,
