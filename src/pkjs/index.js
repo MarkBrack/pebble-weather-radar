@@ -1,6 +1,7 @@
 var renderer = require('./render');
 
 var CHUNK_SIZE = 512;
+var MAX_RADAR_FRAMES = 8;
 var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 var DEFAULT_HEADERS = {
   'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -15,8 +16,6 @@ var HARDCODED_LOCATION = {
 
 var refreshInFlight = false;
 var queuedRequest = null;
-var lastFrameSignatureByRequest = Object.create(null);
-var lastSentCropMode = null;
 
 function xhr(url, responseType) {
   return new Promise(function(resolve, reject) {
@@ -56,16 +55,6 @@ var transport = {
   }
 };
 
-function latestRadarFrame() {
-  console.log('Fetching RainViewer frame metadata');
-  return fetchJson(RAINVIEWER_API).then(function(payload) {
-    if (!payload || !payload.host || !payload.radar || !payload.radar.past || !payload.radar.past.length) {
-      throw new Error('RainViewer returned no radar frames');
-    }
-    return payload.radar.past[payload.radar.past.length - 1];
-  });
-}
-
 function sendMessage(payload) {
   return new Promise(function(resolve, reject) {
     Pebble.sendAppMessage(payload, resolve, reject);
@@ -76,68 +65,15 @@ function rleEncode(bytes) {
   var result = [];
   var i = 0;
   while (i < bytes.length) {
-    var color = bytes[i];
+    var val = bytes[i];
     var count = 1;
-    while (i + count < bytes.length && bytes[i + count] === color && count < 255) {
+    while (i + count < bytes.length && bytes[i + count] === val && count < 255) {
       count++;
     }
-    result.push(color, count);
+    result.push(val, count);
     i += count;
   }
   return new Uint8Array(result);
-}
-
-function frameSignature(bytes) {
-  // FNV-1a 32-bit hash over the rendered Pebble buffer.
-  var hash = 0x811c9dc5;
-  for (var i = 0; i < bytes.length; i++) {
-    hash ^= bytes[i];
-    hash = (hash * 0x01000193) >>> 0;
-  }
-  return hash.toString(16);
-}
-
-function requestSignatureKey(normalized) {
-  return String(normalized.mapZoom) + ':' + normalized.cropMode;
-}
-
-function sendFrame(bytes, cropMode) {
-  var rleBytes = rleEncode(bytes);
-  console.log('Sending RLE frame, raw=' + bytes.length + ' rle=' + rleBytes.length + ' crop=' + cropMode);
-  return sendMessage({
-    FRAME_WIDTH: renderer.DISPLAY_WIDTH,
-    FRAME_HEIGHT: renderer.DISPLAY_HEIGHT,
-    FRAME_TOTAL_BYTES: rleBytes.length
-  }).then(function() {
-    var offset = 0;
-
-    function sendNextChunk() {
-      if (offset >= rleBytes.length) {
-        console.log('All frame chunks sent');
-        return Promise.resolve();
-      }
-
-      var nextOffset = Math.min(offset + CHUNK_SIZE, rleBytes.length);
-      var chunk = Array.prototype.slice.call(rleBytes.subarray(offset, nextOffset));
-      var currentOffset = offset;
-      offset = nextOffset;
-      console.log('Sending chunk offset=' + currentOffset + ' length=' + chunk.length);
-
-      return sendMessage({
-        FRAME_OFFSET: currentOffset,
-        FRAME_CHUNK: chunk
-      }).then(sendNextChunk);
-    }
-
-    return sendNextChunk();
-  });
-}
-
-function sendNoChange(cropMode) {
-  console.log('Frame unchanged for ' + cropMode + ', using watch cache');
-  return sendMessage({
-    FRAME_NO_CHANGE: 1
-  });
 }
 
 function reportStatus(message) {
@@ -159,18 +95,77 @@ function normalizeRequest(payload) {
   };
 }
 
-function logRenderSummary(result) {
-  console.log(
-    'Rendered ' + result.values.cropMode +
-    ' frame using ' + result.plan.tiles.length +
-    ' tiles at z' + result.plan.hiZoom +
-    ' overlay=' + result.overlayMode +
-    ' colors=' + result.summary.uniqueColorCount
-  );
-  result.summary.topColors.forEach(function(entry) {
-    console.log('Color ' + entry.color + ' count=' + entry.count);
+// --- Send background ---
+
+function sendBackground(bgRle) {
+  console.log('Sending BG RLE, size=' + bgRle.length);
+  return sendMessage({
+    FRAME_WIDTH: renderer.DISPLAY_WIDTH,
+    FRAME_HEIGHT: renderer.DISPLAY_HEIGHT,
+    BG_TOTAL_BYTES: bgRle.length
+  }).then(function() {
+    var offset = 0;
+    function sendNext() {
+      if (offset >= bgRle.length) return Promise.resolve();
+      var end = Math.min(offset + CHUNK_SIZE, bgRle.length);
+      var chunk = Array.prototype.slice.call(bgRle.subarray(offset, end));
+      var currentOffset = offset;
+      offset = end;
+      return sendMessage({ BG_OFFSET: currentOffset, BG_CHUNK: chunk }).then(sendNext);
+    }
+    return sendNext();
   });
 }
+
+// --- Send radar frames ---
+
+function sendRadarFrame(radarRle, index, count) {
+  console.log('Sending radar frame ' + (index + 1) + '/' + count + ', size=' + radarRle.length);
+  return sendMessage({
+    RADAR_FRAME_INDEX: index,
+    RADAR_FRAME_COUNT: count,
+    RADAR_TOTAL_BYTES: radarRle.length
+  }).then(function() {
+    var offset = 0;
+    function sendNext() {
+      if (offset >= radarRle.length) return Promise.resolve();
+      var end = Math.min(offset + CHUNK_SIZE, radarRle.length);
+      var chunk = Array.prototype.slice.call(radarRle.subarray(offset, end));
+      var currentOffset = offset;
+      offset = end;
+      return sendMessage({ RADAR_OFFSET: currentOffset, RADAR_CHUNK: chunk }).then(sendNext);
+    }
+    return sendNext();
+  });
+}
+
+function sendBatchDone() {
+  console.log('Sending batch done');
+  return sendMessage({ RADAR_BATCH_DONE: 1 });
+}
+
+// --- Fetch radar timestamps ---
+
+function fetchRadarTimestamps() {
+  console.log('Fetching RainViewer radar timestamps');
+  return fetchJson(RAINVIEWER_API).then(function(payload) {
+    if (!payload || !payload.radar || !payload.radar.past || !payload.radar.past.length) {
+      throw new Error('No radar data from RainViewer');
+    }
+    var past = payload.radar.past;
+    var frames = past.slice(-MAX_RADAR_FRAMES);
+    if (payload.radar.nowcast && payload.radar.nowcast.length) {
+      var nowcastSlots = MAX_RADAR_FRAMES - frames.length;
+      if (nowcastSlots > 0) {
+        frames = frames.concat(payload.radar.nowcast.slice(0, nowcastSlots));
+      }
+    }
+    console.log('Got ' + frames.length + ' radar frames');
+    return frames;
+  });
+}
+
+// --- Main refresh pipeline ---
 
 function refreshFrame(request) {
   var normalized = normalizeRequest(request);
@@ -178,7 +173,7 @@ function refreshFrame(request) {
 
   if (refreshInFlight) {
     queuedRequest = normalized;
-    console.log('Refresh in flight, queueing latest request');
+    console.log('Refresh in flight, queueing');
     return;
   }
 
@@ -186,51 +181,65 @@ function refreshFrame(request) {
 
   getLocation().then(function(coords) {
     console.log('Using coordinates ' + coords.latitude + ',' + coords.longitude);
-    return latestRadarFrame().then(function(frame) {
-      return renderer.renderScene(transport, {
-          lat: coords.latitude,
-          lon: coords.longitude,
-          mapZoom: normalized.mapZoom,
-          cropMode: normalized.cropMode,
-          mapStyle: 'osm_standard',
-          mapDetailMode: 'native',
-          baseSize: renderer.BASE_SIZE,
-          radarZoomCap: renderer.RADAR_MAX_ZOOM,
-          radarColor: 2,
-          radarOptions: '1_1',
-          framePath: frame.path
+    return fetchRadarTimestamps().then(function(radarTimestamps) {
+      var options = {
+        lat: coords.latitude,
+        lon: coords.longitude,
+        mapZoom: normalized.mapZoom,
+        cropMode: normalized.cropMode,
+        mapStyle: 'osm_standard',
+        mapDetailMode: 'native',
+        baseSize: renderer.BASE_SIZE,
+        radarZoomCap: renderer.RADAR_MAX_ZOOM,
+        radarColor: 2,
+        radarOptions: '1_1'
+      };
+
+      // 1. Render and send background
+      return renderer.renderBackgroundOnly(transport, options).then(function(bgResult) {
+        console.log('Background rendered');
+        var bgRle = rleEncode(bgResult.pebble8Bit);
+        return sendBackground(bgRle).then(function() {
+          // 2. Render and send each radar frame
+          var values = bgResult.values;
+          var frameCount = radarTimestamps.length;
+          var i = 0;
+
+          function sendNextRadar() {
+            if (i >= frameCount) {
+              return sendBatchDone();
+            }
+            var frame = radarTimestamps[i];
+            var currentIdx = i;
+            i++;
+            console.log('Rendering radar frame ' + (currentIdx + 1) + '/' + frameCount);
+            return renderer.renderRadarOverlay(transport, frame.path, values).then(function(result) {
+              var radarRle = rleEncode(result.paletteIndexed);
+              return sendRadarFrame(radarRle, currentIdx, frameCount);
+            }).then(sendNextRadar);
+          }
+
+          return sendNextRadar();
         });
+      });
     });
-  }).then(function(result) {
-    logRenderSummary(result);
-    var signatureKey = requestSignatureKey(normalized);
-    var signature = frameSignature(result.pebble8Bit);
-    var cropChanged = (lastSentCropMode !== null && lastSentCropMode !== normalized.cropMode);
-    if (!cropChanged && lastFrameSignatureByRequest[signatureKey] === signature) {
-      return sendNoChange(normalized.cropMode);
-    }
-    lastFrameSignatureByRequest[signatureKey] = signature;
-    lastSentCropMode = normalized.cropMode;
-    return sendFrame(result.pebble8Bit, normalized.cropMode);
   }).then(function() {
-    console.log('Frame refresh complete');
+    console.log('Batch refresh complete');
   }).catch(function(error) {
-    console.log(error.message);
+    console.log('Refresh error: ' + error.message);
     reportStatus(error.message);
   }).then(function() {
     refreshInFlight = false;
     if (queuedRequest) {
-      var nextRequest = queuedRequest;
+      var next = queuedRequest;
       queuedRequest = null;
-      refreshFrame(nextRequest);
+      refreshFrame(next);
     }
   });
 }
 
 Pebble.addEventListener('ready', function() {
   console.log('PebbleKit JS ready');
-  // Send a greeting to let the watch know we're ready
-  // This triggers the watch's messageReceived → pkjsReady → onWritable chain
   Pebble.sendAppMessage({ STATUS_TEXT: 'Ready' }, function() {
     console.log('Phone greeting sent OK');
   }, function(e) {
@@ -239,6 +248,6 @@ Pebble.addEventListener('ready', function() {
 });
 
 Pebble.addEventListener('appmessage', function(event) {
-  console.log('Received appmessage requesting rerender');
+  console.log('Received appmessage requesting refresh');
   refreshFrame(event ? event.payload : null);
 });

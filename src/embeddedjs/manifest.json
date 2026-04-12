@@ -5,7 +5,17 @@
 	"modules": {
 		"*": [
 			"./main.js",
-			"./dynamic-pebble-bitmap"
+			"./dynamic-pebble-bitmap",
+			"./radar-overlay"
 		]
+	},
+	"creation": {
+		"chunk": {
+			"initial": 32768
+		},
+		"heap": {
+			"initial": 768
+		},
+		"stack": 384
 	}
 }

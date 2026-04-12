@@ -602,6 +602,122 @@ function renderScene(transport, options) {
   });
 }
 
+// --- Split rendering: background-only and radar-only ---
+
+var RAIN_COLOR_TO_INDEX = {};
+
+(function initRainColorMap() {
+  var entries = [
+    { color: RAIN_COLORS.drizzle, index: 1 },
+    { color: RAIN_COLORS.light, index: 2 },
+    { color: RAIN_COLORS.moderate, index: 3 },
+    { color: RAIN_COLORS.heavy, index: 4 },
+    { color: RAIN_COLORS.intense, index: 5 },
+    { color: RAIN_COLORS.extreme, index: 6 }
+  ];
+  entries.forEach(function(e) {
+    RAIN_COLOR_TO_INDEX[e.color[0] + ',' + e.color[1] + ',' + e.color[2]] = e.index;
+  });
+})();
+
+function classifyRadarToPalette(radarImage, values) {
+  var size = values.baseSize;
+  var buffer = new Uint8Array(size * size);
+  var x, y;
+
+  for (y = 0; y < size; y++) {
+    for (x = 0; x < size; x++) {
+      var samplePoint = sampleScaledRadar(radarImage, size, values.mapZoom, values.radarZoom, x, y);
+      if (!samplePoint) continue;
+
+      var radarIndex = ((samplePoint.y * radarImage.width) + samplePoint.x) * 4;
+      var bucket = radarBucketForPixel(
+        radarImage.rgba[radarIndex],
+        radarImage.rgba[radarIndex + 1],
+        radarImage.rgba[radarIndex + 2],
+        radarImage.rgba[radarIndex + 3]
+      );
+
+      if (!bucket) continue;
+      if (bucket.dither && ((x + y) % 2 === 1)) continue;
+
+      var colorKey = bucket.color[0] + ',' + bucket.color[1] + ',' + bucket.color[2];
+      buffer[y * size + x] = RAIN_COLOR_TO_INDEX[colorKey] || 0;
+    }
+  }
+
+  return buffer;
+}
+
+function cropPaletteForPebble(paletteBuffer, values) {
+  var left = Math.floor((values.baseSize - values.cropWidth) / 2);
+  var top = Math.floor((values.baseSize - values.cropHeight) / 2);
+  var x, y;
+
+  if (values.cropScale === 1) {
+    var output = new Uint8Array(DISPLAY_WIDTH * DISPLAY_HEIGHT);
+    for (y = 0; y < DISPLAY_HEIGHT; y++) {
+      for (x = 0; x < DISPLAY_WIDTH; x++) {
+        output[y * DISPLAY_WIDTH + x] = paletteBuffer[(top + y) * values.baseSize + (left + x)];
+      }
+    }
+    return output;
+  }
+
+  if (values.cropScale === 2) {
+    var output2 = new Uint8Array(DISPLAY_WIDTH * DISPLAY_HEIGHT);
+    for (y = 0; y < DISPLAY_HEIGHT; y++) {
+      var sy = top + y * 2;
+      for (x = 0; x < DISPLAY_WIDTH; x++) {
+        var sx = left + x * 2;
+        var p1 = paletteBuffer[sy * values.baseSize + sx];
+        var p2 = paletteBuffer[sy * values.baseSize + sx + 1];
+        var p3 = paletteBuffer[(sy + 1) * values.baseSize + sx];
+        var p4 = paletteBuffer[(sy + 1) * values.baseSize + sx + 1];
+        output2[y * DISPLAY_WIDTH + x] = Math.max(p1, p2, p3, p4);
+      }
+    }
+    return output2;
+  }
+
+  throw new Error('Unsupported crop scale ' + values.cropScale);
+}
+
+function renderBackgroundOnly(transport, options) {
+  var values = getRenderValues(options);
+  var plan = buildMapTilePlan(values);
+
+  return fetchTilesSerially(transport, plan.tiles).then(function(tileImages) {
+    var mapSource = assembleMapSource(plan, tileImages);
+    var scaledMap = scaleMapSourceToBase(mapSource, plan, values.baseSize);
+    var composite = scaledMap.rgba.slice(0);
+    applyPebbleMapStyle(composite);
+    drawCrosshairIntoBuffer(composite, values.baseSize, values.baseSize);
+    var pebbleRgba = cropAndScaleForPebble(composite, values);
+    var pebble8Bit = quantizeToPebble8Bit(pebbleRgba);
+
+    return {
+      pebble8Bit: pebble8Bit,
+      values: values,
+      plan: plan
+    };
+  });
+}
+
+function renderRadarOverlay(transport, framePath, values) {
+  var radarUrl = buildRadarUrl(
+    framePath, values.baseSize, values.radarZoom,
+    values.lat, values.lon,
+    values.radarColor, values.radarOptions
+  );
+
+  return fetchPngRgba(transport.fetchArrayBuffer, radarUrl).then(function(radarImage) {
+    var paletteBuffer = classifyRadarToPalette(radarImage, values);
+    var croppedPalette = cropPaletteForPebble(paletteBuffer, values);
+    return { paletteIndexed: croppedPalette };
+  });
+}
+
 module.exports = {
   DISPLAY_WIDTH: DISPLAY_WIDTH,
   DISPLAY_HEIGHT: DISPLAY_HEIGHT,
@@ -611,5 +727,7 @@ module.exports = {
   RAIN_COLORS: RAIN_COLORS,
   getRenderValues: getRenderValues,
   buildMapTilePlan: buildMapTilePlan,
-  renderScene: renderScene
+  renderScene: renderScene,
+  renderBackgroundOnly: renderBackgroundOnly,
+  renderRadarOverlay: renderRadarOverlay
 };
