@@ -9,11 +9,26 @@ Build and validate a browser demo that answers one question well:
 - crop it to Pebble-sized output
 - prove the image pipeline before reducing it to the essentials for the Pebble app
 
+Working target for the Pebble app:
+
+- `emery`
+- Pebble Time 2
+- `200x228` color display
+
 The main demo file is:
 
 - [rainviewer_osm_overlay_test (6).html](/mnt/d/Personal/pebble/rain-radar/rainviewer_osm_overlay_test%20%286%29.html)
 
 The early Pebble app implementation already exists, but this doc is about the HTML prototype and what should be ported from it.
+
+Current Pebble port alignment notes:
+
+- keep the watch target as `emery`
+- use `OSM Standard` tiles in the Pebble app
+- use the map remap colours and thresholds from [rainviewer_osm_overlay_test (6).html](/mnt/d/Personal/pebble/rain-radar/rainviewer_osm_overlay_test%20%286%29.html)
+- when the JS port differs from the HTML prototype, prefer the HTML prototype unless we explicitly decide otherwise
+- verify the phone-side render before sending to the watch by running `node scripts/render_debug.js --crop=standard` or `node scripts/render_debug.js --crop=wide`
+- the debug render writes intermediate artifacts into `build/` so tile assembly and final Pebble output can be inspected separately
 
 ## Current Demo
 
@@ -52,7 +67,7 @@ Current defaults in the demo:
 - map zoom: `9`
 - radar zoom cap: `7`
 - Pebble crop: `Standard`
-- basemap style: `CARTO Light No Labels`
+- basemap style: `OSM Standard`
 - map detail: `Native`
 - composite size: `512`
 - map wash: `0.55`
@@ -108,8 +123,9 @@ Important details:
 
 - tile provider is selectable
 - we now fetch only the tile coverage needed for the active Pebble crop mode
-- `Standard` crop fetches only enough map area for a `144x168` source crop
-- `Wide` crop fetches only enough map area for a `288x336` source crop
+- for the Pebble app we are building for `emery`, so the live watch crop is `200x228`
+- `Standard` crop in older notes referred to a smaller `144x168` Pebble-sized source crop from earlier experiments
+- `Wide` crop in older notes referred to a `288x336` source crop from those same experiments
 
 This was an important optimization. Earlier versions fetched a much larger fixed area and wasted requests.
 
@@ -181,7 +197,8 @@ Standard labeled OSM tiles look bad at tiny output sizes because labels blur bad
 
 Best current default:
 
-- `CARTO Light No Labels`
+- the HTML demo can still compare multiple basemaps
+- the current Pebble app target should use `OSM Standard` because that is the source we want to tune against now
 
 Reason:
 
@@ -295,3 +312,14 @@ But the HTML prototype is now the clearer source of truth for:
 
 The next Pebble iteration should port the reduced feature set from this doc, not every control from the prototype.
 
+## Current Architecture Notes
+
+- Target watch remains `emery` / Pebble Time 2.
+- Basemap source remains `OSM Standard`.
+- Color remap and radar compositing remain defined by `rainviewer_osm_overlay_test (6).html`.
+- Production renderer remains phone-side in PKJS so OSM fetch, remap, crop, radar overlay, and quantization all happen before watch transfer.
+- Watch app is now structured as Alloy/embeddedjs:
+  - `src/embeddedjs/main.js` owns buttons, AppMessage reads/writes, frame assembly, and redraw scheduling.
+  - `src/c/mdbl.c` is only window/bootstrap.
+  - `src/c/dynamic-pebble-bitmap.c` is a minimal native bitmap wrapper so embeddedjs/Poco can draw the completed 8-bit Pebble frame.
+- JS-side debug images must continue to be checked before blaming the watch transfer path.

@@ -16,7 +16,6 @@ var HARDCODED_LOCATION = {
 var refreshInFlight = false;
 var queuedRequest = null;
 var lastFrameSignatureByRequest = Object.create(null);
-var lastSentCropMode = null;
 
 function xhr(url, responseType) {
   return new Promise(function(resolve, reject) {
@@ -107,7 +106,8 @@ function sendFrame(bytes, cropMode) {
   return sendMessage({
     FRAME_WIDTH: renderer.DISPLAY_WIDTH,
     FRAME_HEIGHT: renderer.DISPLAY_HEIGHT,
-    FRAME_TOTAL_BYTES: rleBytes.length
+    FRAME_TOTAL_BYTES: rleBytes.length,
+    STATUS_TEXT: 'Sending ' + cropMode + '...'
   }).then(function() {
     var offset = 0;
 
@@ -184,10 +184,13 @@ function refreshFrame(request) {
 
   refreshInFlight = true;
 
-  getLocation().then(function(coords) {
+  reportStatus('Locating...').then(function() {
+    return getLocation();
+  }).then(function(coords) {
     console.log('Using coordinates ' + coords.latitude + ',' + coords.longitude);
     return latestRadarFrame().then(function(frame) {
-      return renderer.renderScene(transport, {
+      return reportStatus('Rendering ' + normalized.cropMode + '...').then(function() {
+        return renderer.renderScene(transport, {
           lat: coords.latitude,
           lon: coords.longitude,
           mapZoom: normalized.mapZoom,
@@ -200,17 +203,16 @@ function refreshFrame(request) {
           radarOptions: '1_1',
           framePath: frame.path
         });
+      });
     });
   }).then(function(result) {
     logRenderSummary(result);
     var signatureKey = requestSignatureKey(normalized);
     var signature = frameSignature(result.pebble8Bit);
-    var cropChanged = (lastSentCropMode !== null && lastSentCropMode !== normalized.cropMode);
-    if (!cropChanged && lastFrameSignatureByRequest[signatureKey] === signature) {
+    if (lastFrameSignatureByRequest[signatureKey] === signature) {
       return sendNoChange(normalized.cropMode);
     }
     lastFrameSignatureByRequest[signatureKey] = signature;
-    lastSentCropMode = normalized.cropMode;
     return sendFrame(result.pebble8Bit, normalized.cropMode);
   }).then(function() {
     console.log('Frame refresh complete');
@@ -229,13 +231,7 @@ function refreshFrame(request) {
 
 Pebble.addEventListener('ready', function() {
   console.log('PebbleKit JS ready');
-  // Send a greeting to let the watch know we're ready
-  // This triggers the watch's messageReceived → pkjsReady → onWritable chain
-  Pebble.sendAppMessage({ STATUS_TEXT: 'Ready' }, function() {
-    console.log('Phone greeting sent OK');
-  }, function(e) {
-    console.log('Phone greeting failed: ' + (e && e.message ? e.message : JSON.stringify(e)));
-  });
+  // Watch side sends REQUEST_FRAME on boot; avoid duplicate startup refresh here.
 });
 
 Pebble.addEventListener('appmessage', function(event) {

@@ -23,7 +23,7 @@ def build(ctx):
         ctx.env = ctx.all_envs[platform]
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
-        ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'),
+        ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c', excl=['src/c/dynamic-pebble-bitmap.c']),
                       target=app_elf, bin_type='app')
 
         if build_worker:
@@ -39,5 +39,6 @@ def build(ctx):
     ctx.set_group('bundle')
     ctx.pbl_bundle(binaries=binaries,
                    js=ctx.path.ant_glob(['src/pkjs/**/*.js',
-                                         'src/pkjs/**/*.json']),
+                                         'src/pkjs/**/*.json',
+                                         'src/common/**/*.js']),
                    js_entry_file='src/pkjs/index.js')

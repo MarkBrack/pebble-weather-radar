@@ -8,9 +8,10 @@
   "pebble": {
     "displayName": "Rain Radar",
     "uuid": "45f7d2b8-174e-4793-8e10-b2037c4ec4ed",
+    "projectType": "moddable",
     "sdkVersion": "3",
     "enableMultiJS": true,
-    "targetPlatforms": ["basalt"],
+    "targetPlatforms": ["emery"],
     "capabilities": ["location"],
     "watchapp": {
       "watchface": false
@@ -18,11 +19,13 @@
     "messageKeys": [
       "REQUEST_FRAME",
       "MAP_ZOOM",
+      "MAP_CROP_MODE",
       "FRAME_WIDTH",
       "FRAME_HEIGHT",
       "FRAME_TOTAL_BYTES",
       "FRAME_OFFSET",
       "FRAME_CHUNK",
+      "FRAME_NO_CHANGE",
       "STATUS_TEXT"
     ],
     "resources": {
