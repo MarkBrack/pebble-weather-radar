@@ -174,6 +174,16 @@ function flushFrameRequest() {
 	]));
 }
 
+function clearBatchBuffers() {
+	state.bgBuffer = null;
+	state.bgReceiving = null;
+	state.radarFrames = [];
+	state.radarFrameCount = 0;
+	state.radarReceiving = null;
+	state.currentFrame = 0;
+	state.frameReady = false;
+}
+
 // --- Background receiving ---
 
 function beginBg(map) {
@@ -186,16 +196,14 @@ function beginBg(map) {
 		return;
 	}
 
+	// Release the previous batch before allocating the next large receive buffer.
+	clearBatchBuffers();
+
 	state.bgReceiving = {
 		expected: total,
 		received: 0,
 		buffer: new Uint8Array(total)
 	};
-	state.bgBuffer = null;
-	state.radarFrames = [];
-	state.radarFrameCount = 0;
-	state.currentFrame = 0;
-	state.frameReady = false;
 }
 
 function handleBgChunk(map) {
@@ -232,6 +240,7 @@ function beginRadar(map) {
 	if (index === undefined || !count || !total) return;
 
 	state.radarFrameCount = count;
+	state.radarReceiving = null;
 	state.radarReceiving = {
 		index: index,
 		expected: total,
