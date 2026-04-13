@@ -50,14 +50,14 @@ const state = {
 	cropMode: CROP_WIDE,
 	statusText: "Starting...",
 
-	// Background (stored as array of RLE chunk ArrayBuffers)
-	bgChunks: null,
-	bgReceiving: null,  // { expected, received, chunks: [] }
+	// Background stored as one contiguous RLE buffer.
+	bgBuffer: null,
+	bgReceiving: null,  // { expected, received, buffer: Uint8Array }
 
-	// Radar frames (array of arrays of RLE chunk ArrayBuffers)
+	// Radar frames stored as contiguous RLE buffers.
 	radarFrames: [],
 	radarFrameCount: 0,
-	radarReceiving: null,  // { index, expected, received, chunks: [] }
+	radarReceiving: null,  // { index, expected, received, buffer: Uint8Array }
 
 	// Animation state
 	currentFrame: 0,
@@ -110,26 +110,22 @@ function drawPageDots() {
 }
 
 function compositeFrame() {
-	if (!state.bgChunks) return;
+	if (!state.bgBuffer) return;
 
 	render.begin();
 
-	// 1. Draw background from stored RLE chunks
+	// 1. Draw background from stored RLE data
 	bgDecoder.reset();
-	for (let i = 0; i < state.bgChunks.length; i++) {
-		bgDecoder.decodeChunk(render, state.bgChunks[i]);
-	}
+	bgDecoder.decodeChunk(render, state.bgBuffer);
 
 	// 2. Overlay radar if available
 	if (state.radarFrames.length > 0 &&
 		state.currentFrame >= 0 &&
 		state.currentFrame < state.radarFrames.length) {
-		const chunks = state.radarFrames[state.currentFrame];
-		if (chunks) {
+		const frame = state.radarFrames[state.currentFrame];
+		if (frame) {
 			radarOverlay.reset();
-			for (let i = 0; i < chunks.length; i++) {
-				radarOverlay.decodeChunk(render, chunks[i], RADAR_PALETTE);
-			}
+			radarOverlay.decodeChunk(render, frame, RADAR_PALETTE);
 		}
 	}
 
@@ -193,9 +189,9 @@ function beginBg(map) {
 	state.bgReceiving = {
 		expected: total,
 		received: 0,
-		chunks: []
+		buffer: new Uint8Array(total)
 	};
-	state.bgChunks = null;
+	state.bgBuffer = null;
 	state.radarFrames = [];
 	state.radarFrameCount = 0;
 	state.currentFrame = 0;
@@ -210,13 +206,20 @@ function handleBgChunk(map) {
 	const chunk = map.get("BG_CHUNK");
 	if (offset === undefined || !(chunk instanceof ArrayBuffer)) return;
 
-	bg.chunks.push(chunk);
-	bg.received += chunk.byteLength;
+	const chunkBytes = new Uint8Array(chunk);
+	if (offset !== bg.received || (offset + chunkBytes.byteLength) > bg.expected) {
+		state.bgReceiving = null;
+		setStatus("BG chunk error");
+		return;
+	}
+
+	bg.buffer.set(chunkBytes, offset);
+	bg.received += chunkBytes.byteLength;
 
 	if (bg.received >= bg.expected) {
-		state.bgChunks = bg.chunks;
+		state.bgBuffer = bg.buffer.buffer;
 		state.bgReceiving = null;
-		console.log("watch: BG received, " + bg.expected + " bytes in " + bg.chunks.length + " chunks");
+		console.log("watch: BG received, " + bg.expected + " bytes");
 	}
 }
 
@@ -233,7 +236,7 @@ function beginRadar(map) {
 		index: index,
 		expected: total,
 		received: 0,
-		chunks: []
+		buffer: new Uint8Array(total)
 	};
 }
 
@@ -245,17 +248,24 @@ function handleRadarChunk(map) {
 	const chunk = map.get("RADAR_CHUNK");
 	if (offset === undefined || !(chunk instanceof ArrayBuffer)) return;
 
-	rx.chunks.push(chunk);
-	rx.received += chunk.byteLength;
+	const chunkBytes = new Uint8Array(chunk);
+	if (offset !== rx.received || (offset + chunkBytes.byteLength) > rx.expected) {
+		state.radarReceiving = null;
+		setStatus("Radar chunk error");
+		return;
+	}
+
+	rx.buffer.set(chunkBytes, offset);
+	rx.received += chunkBytes.byteLength;
 
 	if (rx.received >= rx.expected) {
-		// Store completed radar frame as array of chunks
+		// Store completed radar frame as one buffer to minimize XS allocations.
 		while (state.radarFrames.length <= rx.index) {
 			state.radarFrames.push(null);
 		}
-		state.radarFrames[rx.index] = rx.chunks;
+		state.radarFrames[rx.index] = rx.buffer.buffer;
 		state.radarReceiving = null;
-		console.log("watch: radar frame " + (rx.index + 1) + " received, " + rx.expected + " bytes in " + rx.chunks.length + " chunks");
+		console.log("watch: radar frame " + (rx.index + 1) + " received, " + rx.expected + " bytes");
 	}
 }
 
