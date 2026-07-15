@@ -5,10 +5,16 @@ import Button from "pebble/button";
 
 import DynamicPebbleBitmap from "./dynamic-pebble-bitmap";
 import RadarOverlay from "./radar-overlay";
+import RLEBuffer from "./rle-buffer";
 
 const DISPLAY_WIDTH = 200;
 const DISPLAY_HEIGHT = 228;
 const MAP_ZOOM = 8;
+
+const FRAME_PIXELS = DISPLAY_WIDTH * DISPLAY_HEIGHT;
+const MAX_RLE_FRAME_BYTES = FRAME_PIXELS + Math.ceil(FRAME_PIXELS / 128);
+const MAX_BATCH_RLE_BYTES = 56000;
+const MAX_RADAR_FRAMES = 3;
 
 const CROP_STANDARD = 0;
 const CROP_WIDE = 1;
@@ -50,14 +56,14 @@ const state = {
 	cropMode: CROP_WIDE,
 	statusText: "Starting...",
 
-	// Background stored as one contiguous RLE buffer.
 	bgBuffer: null,
-	bgReceiving: null,  // { expected, received, buffer: Uint8Array }
+	bgReceiving: null,  // { expected, received, buffer: RLEBuffer }
 
-	// Radar frames stored as contiguous RLE buffers.
 	radarFrames: [],
 	radarFrameCount: 0,
-	radarReceiving: null,  // { index, expected, received, buffer: Uint8Array }
+	radarReceiving: null,  // { index, expected, received, buffer: RLEBuffer }
+	batchRleBytes: 0,
+	transferFailed: false,
 
 	// Animation state
 	currentFrame: 0,
@@ -90,7 +96,8 @@ function drawStatus(text) {
 
 const DOT_RADIUS = 3;
 const DOT_SPACING = 10;
-const DOT_COLOR_ACTIVE = 0b11000000;   // black
+const DOT_COLOR_BACKDROP = 0b11000000; // black
+const DOT_COLOR_ACTIVE = 0b11111111;   // white
 const DOT_COLOR_INACTIVE = 0b11101010; // grey (r2 g2 b2)
 const DOT_Y = DISPLAY_HEIGHT - 8;
 
@@ -99,6 +106,9 @@ function drawPageDots() {
 	if (count <= 1) return;
 	const totalWidth = (count - 1) * DOT_SPACING;
 	const startX = Math.floor((DISPLAY_WIDTH - totalWidth) / 2);
+	const backdropX = startX - DOT_RADIUS - 4;
+	const backdropWidth = totalWidth + (DOT_RADIUS * 2) + 8;
+	render.fillRectangle(DOT_COLOR_BACKDROP, backdropX, DOT_Y - 6, backdropWidth, 12);
 	for (let i = 0; i < count; i++) {
 		const color = (i === state.currentFrame) ? DOT_COLOR_ACTIVE : DOT_COLOR_INACTIVE;
 		const cx = startX + (i * DOT_SPACING);
@@ -114,27 +124,31 @@ function compositeFrame() {
 
 	render.begin();
 
-	// 1. Draw background from stored RLE data
 	bgDecoder.reset();
-	bgDecoder.decodeChunk(render, state.bgBuffer);
+	let valid = bgDecoder.decode(render, state.bgBuffer);
 
-	// 2. Overlay radar if available
-	if (state.radarFrames.length > 0 &&
+	if (valid && state.radarFrames.length > 0 &&
 		state.currentFrame >= 0 &&
 		state.currentFrame < state.radarFrames.length) {
 		const frame = state.radarFrames[state.currentFrame];
 		if (frame) {
 			radarOverlay.reset();
-			radarOverlay.decodeChunk(render, frame, RADAR_PALETTE);
+			valid = radarOverlay.decode(render, frame, RADAR_PALETTE);
 		}
 	}
 
-	// 3. Draw page dots
-	drawPageDots();
-
+	if (valid) drawPageDots();
 	render.end();
-	state.frameReady = true;
-	state.statusText = "";
+
+	state.frameReady = valid;
+	if (valid) {
+		state.statusText = "";
+	}
+	else {
+		state.transferFailed = true;
+		setStatus("Data error");
+		queueFrameRequest();
+	}
 }
 
 function setStatus(text) {
@@ -174,12 +188,24 @@ function flushFrameRequest() {
 	]));
 }
 
+function closeBuffer(buffer) {
+	if (buffer) buffer.close();
+}
+
 function clearBatchBuffers() {
+	closeBuffer(state.bgBuffer);
+	if (state.bgReceiving) closeBuffer(state.bgReceiving.buffer);
+	for (let i = 0; i < state.radarFrames.length; i++) {
+		closeBuffer(state.radarFrames[i]);
+	}
+	if (state.radarReceiving) closeBuffer(state.radarReceiving.buffer);
 	state.bgBuffer = null;
 	state.bgReceiving = null;
 	state.radarFrames = [];
 	state.radarFrameCount = 0;
 	state.radarReceiving = null;
+	state.batchRleBytes = 0;
+	state.transferFailed = false;
 	state.currentFrame = 0;
 	state.frameReady = false;
 }
@@ -190,20 +216,34 @@ function beginBg(map) {
 	const width = map.get("FRAME_WIDTH");
 	const height = map.get("FRAME_HEIGHT");
 	const total = map.get("BG_TOTAL_BYTES");
+	console.log("watch: begin BG, " + total + " bytes");
+
+	// Release the previous batch before allocating the next large receive buffer.
+	clearBatchBuffers();
 
 	if ((width !== DISPLAY_WIDTH) || (height !== DISPLAY_HEIGHT) || !total) {
 		setStatus("Size error");
 		return;
 	}
 
-	// Release the previous batch before allocating the next large receive buffer.
-	clearBatchBuffers();
+	if (total > MAX_RLE_FRAME_BYTES || total > MAX_BATCH_RLE_BYTES) {
+		setStatus("Map too large");
+		return;
+	}
 
-	state.bgReceiving = {
-		expected: total,
-		received: 0,
-		buffer: new Uint8Array(total)
-	};
+	state.batchRleBytes = total;
+	try {
+		state.bgReceiving = {
+			expected: total,
+			received: 0,
+			buffer: new RLEBuffer(total)
+		};
+	}
+	catch (error) {
+		state.transferFailed = true;
+		setStatus("Memory error");
+	}
+	console.log("watch: BG receive ready");
 }
 
 function handleBgChunk(map) {
@@ -214,19 +254,31 @@ function handleBgChunk(map) {
 	const chunk = map.get("BG_CHUNK");
 	if (offset === undefined || !(chunk instanceof ArrayBuffer)) return;
 
-	const chunkBytes = new Uint8Array(chunk);
-	if (offset !== bg.received || (offset + chunkBytes.byteLength) > bg.expected) {
+	const chunkLength = chunk.byteLength;
+	if (bg.received === 0) {
+		console.log("watch: first BG chunk, " + chunkLength + " bytes");
+	}
+	if (offset < bg.received || (bg.received === 0 && offset !== 0)) {
+		console.log("watch: stale BG chunk offset=" + offset + " expected=" + bg.received);
+		return;
+	}
+	if (offset !== bg.received || (offset + chunkLength) > bg.expected) {
+		console.log("watch: BG chunk error offset=" + offset + " expected=" + bg.received + " len=" + chunkLength + " total=" + bg.expected);
+		closeBuffer(bg.buffer);
 		state.bgReceiving = null;
-		setStatus("BG chunk error");
+		state.transferFailed = true;
+		setStatus("BG " + offset + "/" + bg.received);
+		queueFrameRequest();
 		return;
 	}
 
-	bg.buffer.set(chunkBytes, offset);
-	bg.received += chunkBytes.byteLength;
+	bg.buffer.write(offset, chunk);
+	bg.received += chunkLength;
 
 	if (bg.received >= bg.expected) {
-		state.bgBuffer = bg.buffer.buffer;
+		state.bgBuffer = bg.buffer;
 		state.bgReceiving = null;
+		compositeFrame();
 		console.log("watch: BG received, " + bg.expected + " bytes");
 	}
 }
@@ -239,14 +291,43 @@ function beginRadar(map) {
 	const total = map.get("RADAR_TOTAL_BYTES");
 	if (index === undefined || !count || !total) return;
 
+	if (!state.bgBuffer || state.transferFailed) {
+		return;
+	}
+
+	if (state.radarReceiving) {
+		closeBuffer(state.radarReceiving.buffer);
+		state.batchRleBytes -= state.radarReceiving.expected;
+		state.radarReceiving = null;
+		state.transferFailed = true;
+		setStatus("Radar error");
+		return;
+	}
+
+	if (count > MAX_RADAR_FRAMES ||
+		(state.radarFrameCount && count !== state.radarFrameCount) ||
+		index !== state.radarFrames.length ||
+		total > MAX_RLE_FRAME_BYTES || (state.batchRleBytes + total) > MAX_BATCH_RLE_BYTES) {
+		state.transferFailed = true;
+		setStatus("Radar error");
+		return;
+	}
+
 	state.radarFrameCount = count;
-	state.radarReceiving = null;
-	state.radarReceiving = {
-		index: index,
-		expected: total,
-		received: 0,
-		buffer: new Uint8Array(total)
-	};
+	state.batchRleBytes += total;
+	try {
+		state.radarReceiving = {
+			index: index,
+			expected: total,
+			received: 0,
+			buffer: new RLEBuffer(total)
+		};
+	}
+	catch (error) {
+		state.batchRleBytes -= total;
+		state.transferFailed = true;
+		setStatus("Memory error");
+	}
 }
 
 function handleRadarChunk(map) {
@@ -257,22 +338,30 @@ function handleRadarChunk(map) {
 	const chunk = map.get("RADAR_CHUNK");
 	if (offset === undefined || !(chunk instanceof ArrayBuffer)) return;
 
-	const chunkBytes = new Uint8Array(chunk);
-	if (offset !== rx.received || (offset + chunkBytes.byteLength) > rx.expected) {
+	const chunkLength = chunk.byteLength;
+	if (offset < rx.received || (rx.received === 0 && offset !== 0)) {
+		console.log("watch: stale radar chunk offset=" + offset + " expected=" + rx.received);
+		return;
+	}
+	if (offset !== rx.received || (offset + chunkLength) > rx.expected) {
+		console.log("watch: radar chunk error offset=" + offset + " expected=" + rx.received + " len=" + chunkLength + " total=" + rx.expected);
+		closeBuffer(rx.buffer);
+		state.batchRleBytes -= rx.expected;
 		state.radarReceiving = null;
-		setStatus("Radar chunk error");
+		state.transferFailed = true;
+		setStatus("Radar " + offset + "/" + rx.received);
+		queueFrameRequest();
 		return;
 	}
 
-	rx.buffer.set(chunkBytes, offset);
-	rx.received += chunkBytes.byteLength;
+	rx.buffer.write(offset, chunk);
+	rx.received += chunkLength;
 
 	if (rx.received >= rx.expected) {
-		// Store completed radar frame as one buffer to minimize XS allocations.
 		while (state.radarFrames.length <= rx.index) {
 			state.radarFrames.push(null);
 		}
-		state.radarFrames[rx.index] = rx.buffer.buffer;
+		state.radarFrames[rx.index] = rx.buffer;
 		state.radarReceiving = null;
 		console.log("watch: radar frame " + (rx.index + 1) + " received, " + rx.expected + " bytes");
 	}
@@ -280,6 +369,11 @@ function handleRadarChunk(map) {
 
 function handleBatchDone() {
 	console.log("watch: batch complete, " + state.radarFrames.length + " frames");
+	if (state.transferFailed || !state.bgBuffer ||
+		state.radarFrames.length !== state.radarFrameCount) {
+		queueFrameRequest();
+		return;
+	}
 	// Show the most recent frame (last in array)
 	state.currentFrame = state.radarFrames.length - 1;
 	compositeFrame();
@@ -321,7 +415,10 @@ function onReadable() {
 		return;
 	}
 
-	// STATUS_TEXT: bootstrap greeting only (triggers onWritable chain)
+	if (map.has("STATUS_TEXT")) {
+		setStatus(map.get("STATUS_TEXT"));
+		return;
+	}
 }
 
 function onWritable() {
@@ -389,8 +486,8 @@ setStatus("Loading...");
 
 message = new Message({
 	keys: MESSAGE_KEYS,
-	input: 768,
-	output: 64,
+	input: 512,
+	output: 128,
 	onReadable,
 	onWritable,
 	onSuspend

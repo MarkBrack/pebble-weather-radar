@@ -6,12 +6,13 @@
 		"*": [
 			"./main.js",
 			"./dynamic-pebble-bitmap",
-			"./radar-overlay"
+			"./radar-overlay",
+			"./rle-buffer"
 		]
 	},
 	"creation": {
 		"chunk": {
-			"initial": 32768
+			"initial": 16384
 		},
 		"heap": {
 			"initial": 768

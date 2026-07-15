@@ -1,68 +1,63 @@
-// Radar overlay RLE decoder: palette-indexed (index, count) pairs.
-// Index 0 = transparent (skip), indices 1-6 = rain intensity colors.
-// Supports streaming decode across multiple chunks with carry state.
+// PackBits RLE decoder for a complete palette-indexed radar overlay.
+// Index 0 is transparent; indices 1-6 map to rain intensity colours.
 export default class RadarOverlay {
 	constructor(width, height) {
 		this.width = width;
 		this.height = height;
 		this.cx = 0;
 		this.cy = 0;
-		this.carryIndex = -1;
 	}
 
 	reset() {
 		this.cx = 0;
 		this.cy = 0;
-		this.carryIndex = -1;
 	}
 
-	// Decode one RLE chunk. render.begin() must have been called.
-	decodeChunk(render, buffer, palette) {
+	decode(render, buffer, palette) {
 		const bytes = new Uint8Array(buffer);
-		const len = bytes.byteLength;
-		const width = this.width;
-		const height = this.height;
-		let i = 0;
+		let offset = 0;
 
-		// Handle carry from previous chunk
-		if (this.carryIndex >= 0) {
-			if (i >= len) return;
-			this._run(render, this.carryIndex, bytes[i++], palette, width, height);
-			this.carryIndex = -1;
-		}
-
-		while (i < len) {
-			const index = bytes[i++];
-			if (i >= len) {
-				this.carryIndex = index;
-				break;
+		while (offset < bytes.byteLength) {
+			const control = bytes[offset++];
+			if (control <= 127) {
+				const count = control + 1;
+				if ((offset + count) > bytes.byteLength) return false;
+				for (let i = 0; i < count; i++) {
+					if (!this._run(render, bytes[offset++], 1, palette)) return false;
+				}
 			}
-			this._run(render, index, bytes[i++], palette, width, height);
+			else if (control >= 129) {
+				if (offset >= bytes.byteLength) return false;
+				if (!this._run(render, bytes[offset++], 257 - control, palette)) return false;
+			}
+			else {
+				return false;
+			}
 		}
+
+		return this.cx === 0 && this.cy === this.height;
 	}
 
-	_run(render, index, count, palette, width, height) {
+	_run(render, index, count, palette) {
 		let {cx, cy} = this;
-		if (index === 0) {
-			// Transparent: advance cursor without drawing
-			while (count > 0 && cy < height) {
-				const skip = Math.min(count, width - cx);
-				cx += skip;
-				count -= skip;
-				if (cx >= width) { cx = 0; cy++; }
+		const remaining = ((this.height - cy) * this.width) - cx;
+		if (count > remaining || index >= palette.length) return false;
+
+		while (count > 0) {
+			const runLength = Math.min(count, this.width - cx);
+			if (index !== 0) {
+				render.fillRectangle(palette[index], cx, cy, runLength, 1);
 			}
-		} else {
-			// Rain pixel: draw with palette color
-			const color = palette[index];
-			while (count > 0 && cy < height) {
-				const runLen = Math.min(count, width - cx);
-				render.fillRectangle(color, cx, cy, runLen, 1);
-				count -= runLen;
-				cx += runLen;
-				if (cx >= width) { cx = 0; cy++; }
+			count -= runLength;
+			cx += runLength;
+			if (cx >= this.width) {
+				cx = 0;
+				cy++;
 			}
 		}
+
 		this.cx = cx;
 		this.cy = cy;
+		return true;
 	}
 }

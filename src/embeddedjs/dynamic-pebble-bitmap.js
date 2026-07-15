@@ -1,60 +1,60 @@
-// Streaming RLE decoder: decodes (colour, count) pairs directly to screen.
-// No large buffer needed - just 2 bytes of carry state between chunks.
+// PackBits RLE decoder for a complete background frame.
 export default class DynamicPebbleBitmap {
 	constructor(width, height) {
 		this.width = width;
 		this.height = height;
-		// cursor for next pixel position
 		this.cx = 0;
 		this.cy = 0;
-		// carry: pending colour byte without its count yet
-		this.carryColor = -1;
 	}
 
-	// Call once when a new frame begins
 	reset() {
 		this.cx = 0;
 		this.cy = 0;
-		this.carryColor = -1;
 	}
 
-	// Decode one RLE chunk (ArrayBuffer) directly via Poco fillRectangle.
-	// render.begin() must have been called before the first chunk.
-	decodeChunk(render, buffer) {
+	decode(render, buffer) {
 		const bytes = new Uint8Array(buffer);
-		const len = bytes.byteLength;
-		const width = this.width;
-		const height = this.height;
-		let i = 0;
+		let offset = 0;
 
-		// If we had a lone colour byte from the previous chunk, pair it now
-		if (this.carryColor >= 0) {
-			if (i >= len) return; // no count yet, wait for next chunk
-			this._run(render, this.carryColor, bytes[i++], width, height);
-			this.carryColor = -1;
-		}
-
-		while (i < len) {
-			const color = bytes[i++];
-			if (i >= len) {
-				// Count byte split across chunk boundary - carry colour
-				this.carryColor = color;
-				break;
+		while (offset < bytes.byteLength) {
+			const control = bytes[offset++];
+			if (control <= 127) {
+				const count = control + 1;
+				if ((offset + count) > bytes.byteLength) return false;
+				for (let i = 0; i < count; i++) {
+					if (!this._run(render, bytes[offset++], 1)) return false;
+				}
 			}
-			this._run(render, color, bytes[i++], width, height);
+			else if (control >= 129) {
+				if (offset >= bytes.byteLength) return false;
+				if (!this._run(render, bytes[offset++], 257 - control)) return false;
+			}
+			else {
+				return false;
+			}
 		}
+
+		return this.cx === 0 && this.cy === this.height;
 	}
 
-	_run(render, color, count, width, height) {
+	_run(render, color, count) {
 		let {cx, cy} = this;
-		while (count > 0 && cy < height) {
-			const runLen = Math.min(count, width - cx);
-			render.fillRectangle(color, cx, cy, runLen, 1);
-			count -= runLen;
-			cx += runLen;
-			if (cx >= width) { cx = 0; cy++; }
+		const remaining = ((this.height - cy) * this.width) - cx;
+		if (count > remaining) return false;
+
+		while (count > 0) {
+			const runLength = Math.min(count, this.width - cx);
+			render.fillRectangle(color, cx, cy, runLength, 1);
+			count -= runLength;
+			cx += runLength;
+			if (cx >= this.width) {
+				cx = 0;
+				cy++;
+			}
 		}
+
 		this.cx = cx;
 		this.cy = cy;
+		return true;
 	}
 }

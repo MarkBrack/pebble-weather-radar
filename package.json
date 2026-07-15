@@ -1,9 +1,13 @@
 {
   "name": "rain-radar",
   "author": "Mark Brackenborough",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "keywords": ["pebble-app"],
   "private": true,
+  "scripts": {
+    "test": "node scripts/test-rle.js",
+    "build:watch": "powershell -ExecutionPolicy Bypass -File scripts/build-watch.ps1"
+  },
   "dependencies": {},
   "pebble": {
     "displayName": "Rain Radar",

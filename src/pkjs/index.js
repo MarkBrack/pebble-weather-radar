@@ -1,7 +1,11 @@
 var renderer = require('./render');
+var rle = require('./rle');
 
-var CHUNK_SIZE = 512;
-var MAX_RADAR_FRAMES = 8;
+var CHUNK_SIZE = 128;
+var MAX_RADAR_FRAMES = 3;
+var FRAME_PIXELS = renderer.DISPLAY_WIDTH * renderer.DISPLAY_HEIGHT;
+var MAX_RLE_FRAME_BYTES = rle.maxEncodedSize(FRAME_PIXELS);
+var MAX_BATCH_RLE_BYTES = 56000;
 var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 var DEFAULT_HEADERS = {
   'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -61,39 +65,48 @@ function sendMessage(payload) {
   });
 }
 
-function rleEncode(bytes) {
-  var result = [];
-  var i = 0;
-  while (i < bytes.length) {
-    var val = bytes[i];
-    var count = 1;
-    while (i + count < bytes.length && bytes[i + count] === val && count < 255) {
-      count++;
-    }
-    result.push(val, count);
-    i += count;
-  }
-  return new Uint8Array(result);
-}
-
 function reportStatus(message) {
   return sendMessage({
     STATUS_TEXT: message.slice(0, 63)
   }).catch(function() {});
 }
 
+var statusChain = Promise.resolve();
+
+function queueStatus(message) {
+  statusChain = statusChain.then(function() {
+    return reportStatus(message);
+  });
+  return statusChain;
+}
+
 function getLocation() {
   return new Promise(function(resolve) {
+    var settled = false;
+    var fallbackTimer = setTimeout(function() {
+      if (settled) return;
+      settled = true;
+      console.log('GPS timed out, using fallback location');
+      resolve(HARDCODED_LOCATION);
+    }, 12000);
+
+    function finish(coords) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallbackTimer);
+      resolve(coords);
+    }
+
     navigator.geolocation.getCurrentPosition(
       function(pos) {
-        resolve({
+        finish({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude
         });
       },
       function() {
         console.log('GPS failed, using fallback location');
-        resolve(HARDCODED_LOCATION);
+        finish(HARDCODED_LOCATION);
       },
       { timeout: 10000, maximumAge: 300000 }
     );
@@ -113,6 +126,10 @@ function normalizeRequest(payload) {
 
 function sendBackground(bgRle) {
   console.log('Sending BG RLE, size=' + bgRle.length);
+  if (bgRle.length > MAX_RLE_FRAME_BYTES) {
+    throw new Error('Map frame too large');
+  }
+
   return sendMessage({
     FRAME_WIDTH: renderer.DISPLAY_WIDTH,
     FRAME_HEIGHT: renderer.DISPLAY_HEIGHT,
@@ -120,12 +137,12 @@ function sendBackground(bgRle) {
   }).then(function() {
     var offset = 0;
     function sendNext() {
-      if (offset >= bgRle.length) return Promise.resolve();
-      var end = Math.min(offset + CHUNK_SIZE, bgRle.length);
-      var chunk = Array.prototype.slice.call(bgRle.subarray(offset, end));
-      var currentOffset = offset;
-      offset = end;
-      return sendMessage({ BG_OFFSET: currentOffset, BG_CHUNK: chunk }).then(sendNext);
+	  if (offset >= bgRle.length) return Promise.resolve();
+	  var end = Math.min(offset + CHUNK_SIZE, bgRle.length);
+	  var chunk = Array.prototype.slice.call(bgRle.subarray(offset, end));
+	  var currentOffset = offset;
+	  offset = end;
+	  return sendMessage({ BG_OFFSET: currentOffset, BG_CHUNK: chunk }).then(sendNext);
     }
     return sendNext();
   });
@@ -135,6 +152,10 @@ function sendBackground(bgRle) {
 
 function sendRadarFrame(radarRle, index, count) {
   console.log('Sending radar frame ' + (index + 1) + '/' + count + ', size=' + radarRle.length);
+  if (radarRle.length > MAX_RLE_FRAME_BYTES) {
+    throw new Error('Radar frame too large');
+  }
+
   return sendMessage({
     RADAR_FRAME_INDEX: index,
     RADAR_FRAME_COUNT: count,
@@ -142,12 +163,12 @@ function sendRadarFrame(radarRle, index, count) {
   }).then(function() {
     var offset = 0;
     function sendNext() {
-      if (offset >= radarRle.length) return Promise.resolve();
-      var end = Math.min(offset + CHUNK_SIZE, radarRle.length);
-      var chunk = Array.prototype.slice.call(radarRle.subarray(offset, end));
-      var currentOffset = offset;
-      offset = end;
-      return sendMessage({ RADAR_OFFSET: currentOffset, RADAR_CHUNK: chunk }).then(sendNext);
+	  if (offset >= radarRle.length) return Promise.resolve();
+	  var end = Math.min(offset + CHUNK_SIZE, radarRle.length);
+	  var chunk = Array.prototype.slice.call(radarRle.subarray(offset, end));
+	  var currentOffset = offset;
+	  offset = end;
+	  return sendMessage({ RADAR_OFFSET: currentOffset, RADAR_CHUNK: chunk }).then(sendNext);
     }
     return sendNext();
   });
@@ -161,22 +182,76 @@ function sendBatchDone() {
 // --- Fetch radar timestamps ---
 
 function fetchRadarTimestamps() {
-  console.log('Fetching RainViewer radar timestamps');
-  return fetchJson(RAINVIEWER_API).then(function(payload) {
-    if (!payload || !payload.radar || !payload.radar.past || !payload.radar.past.length) {
-      throw new Error('No radar data from RainViewer');
-    }
-    var past = payload.radar.past;
-    var frames = past.slice(-MAX_RADAR_FRAMES);
-    if (payload.radar.nowcast && payload.radar.nowcast.length) {
-      var nowcastSlots = MAX_RADAR_FRAMES - frames.length;
-      if (nowcastSlots > 0) {
-        frames = frames.concat(payload.radar.nowcast.slice(0, nowcastSlots));
-      }
-    }
-    console.log('Got ' + frames.length + ' radar frames');
-    return frames;
-  });
+	console.log('Fetching RainViewer radar timestamps');
+	return fetchJson(RAINVIEWER_API).then(function(payload) {
+		if (!payload || !payload.radar || !payload.radar.past || !payload.radar.past.length) {
+			throw new Error('No radar data from RainViewer');
+		}
+		var past = payload.radar.past;
+		var frames = past.slice(-MAX_RADAR_FRAMES).reverse();
+		if (payload.radar.nowcast && payload.radar.nowcast.length) {
+			var nowcastSlots = MAX_RADAR_FRAMES - frames.length;
+			if (nowcastSlots > 0) {
+				frames = frames.concat(payload.radar.nowcast.slice(0, nowcastSlots));
+			}
+		}
+		console.log('Got ' + frames.length + ' radar frame candidates');
+		return frames;
+	});
+}
+
+function collectRadarFrames(radarTimestamps, transport, values, bgRleLength) {
+	var frameCount = radarTimestamps.length;
+	var i = 0;
+	var accepted = [];
+	var acceptedRadarBytes = 0;
+
+	function renderNext() {
+		if (i >= frameCount) {
+			return accepted;
+		}
+
+		var frame = radarTimestamps[i];
+		var currentIdx = i;
+		i++;
+		console.log('Rendering radar candidate ' + (currentIdx + 1) + '/' + frameCount);
+		return renderer.renderRadarOverlay(transport, frame.path, values).then(function(result) {
+			var radarRle = rle.encode(result.paletteIndexed);
+			if (radarRle.length > MAX_RLE_FRAME_BYTES) {
+				console.log('Skipping oversized radar frame, size=' + radarRle.length);
+				return renderNext();
+			}
+			if ((bgRleLength + acceptedRadarBytes + radarRle.length) > MAX_BATCH_RLE_BYTES) {
+				console.log('Radar frame budget full after accepting ' + accepted.length + ' frame(s)');
+				return accepted;
+			}
+
+			accepted.push(radarRle);
+			acceptedRadarBytes += radarRle.length;
+			return renderNext();
+		});
+	}
+
+	return renderNext();
+}
+
+function sendRadarFrames(radarFrames) {
+	var chronological = radarFrames.slice().reverse();
+	var frameCount = chronological.length;
+	var i = 0;
+
+	function sendNext() {
+		if (i >= frameCount) {
+			return sendBatchDone();
+		}
+
+		var radarRle = chronological[i];
+		var index = i;
+		i++;
+		return sendRadarFrame(radarRle, index, frameCount).then(sendNext);
+	}
+
+	return sendNext();
 }
 
 // --- Main refresh pipeline ---
@@ -193,9 +268,9 @@ function refreshFrame(request) {
 
   refreshInFlight = true;
 
-  getLocation().then(function(coords) {
+  queueStatus('Locating...').then(getLocation).then(function(coords) {
     console.log('Using coordinates ' + coords.latitude + ',' + coords.longitude);
-    return fetchRadarTimestamps().then(function(radarTimestamps) {
+    return queueStatus('Fetching radar...').then(fetchRadarTimestamps).then(function(radarTimestamps) {
       var options = {
         lat: coords.latitude,
         lon: coords.longitude,
@@ -210,33 +285,23 @@ function refreshFrame(request) {
       };
 
       // 1. Render and send background
-      return renderer.renderBackgroundOnly(transport, options).then(function(bgResult) {
+      return queueStatus('Rendering map...').then(function() {
+        return renderer.renderBackgroundOnly(transport, options);
+      }).then(function(bgResult) {
         console.log('Background rendered');
-        var bgRle = rleEncode(bgResult.pebble8Bit);
-        return sendBackground(bgRle).then(function() {
-          // 2. Render and send each radar frame
-          var values = bgResult.values;
-          var frameCount = radarTimestamps.length;
-          var i = 0;
-
-          function sendNextRadar() {
-            if (i >= frameCount) {
-              return sendBatchDone();
-            }
-            var frame = radarTimestamps[i];
-            var currentIdx = i;
-            i++;
-            console.log('Rendering radar frame ' + (currentIdx + 1) + '/' + frameCount);
-            return renderer.renderRadarOverlay(transport, frame.path, values).then(function(result) {
-              var radarRle = rleEncode(result.paletteIndexed);
-              return sendRadarFrame(radarRle, currentIdx, frameCount);
-            }).then(sendNextRadar);
-          }
-
-          return sendNextRadar();
-        });
-      });
-    });
+		var bgRle = rle.encode(bgResult.pebble8Bit);
+        return queueStatus('Sending map...').then(function() {
+          return sendBackground(bgRle);
+        }).then(function() {
+		  // 2. Render newest candidates first, then send accepted frames oldest-to-newest.
+		  var values = bgResult.values;
+          return queueStatus('Rendering radar...').then(function() {
+		    return collectRadarFrames(radarTimestamps, transport, values, bgRle.length);
+          })
+		    .then(sendRadarFrames);
+		});
+	  });
+	});
   }).then(function() {
     console.log('Batch refresh complete');
   }).catch(function(error) {
@@ -262,6 +327,11 @@ Pebble.addEventListener('ready', function() {
 });
 
 Pebble.addEventListener('appmessage', function(event) {
+  var payload = event ? event.payload : null;
+  if (!payload || !payload.REQUEST_FRAME) {
+    console.log('Ignoring appmessage without refresh request');
+    return;
+  }
   console.log('Received appmessage requesting refresh');
-  refreshFrame(event ? event.payload : null);
+  refreshFrame(payload);
 });

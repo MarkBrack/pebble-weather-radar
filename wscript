@@ -23,8 +23,12 @@ def build(ctx):
         ctx.env = ctx.all_envs[platform]
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
+        moddable_includes = os.path.abspath(os.path.join(
+            ctx.env.PEBBLE_SDK_ROOT, '..', '..', 'toolchain',
+            'moddable', 'xs', 'includes'))
         ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c', excl=['src/c/dynamic-pebble-bitmap.c']),
-                      target=app_elf, bin_type='app')
+                      target=app_elf, bin_type='app',
+                      includes=[moddable_includes])
 
         if build_worker:
             worker_elf = '{}/pebble-worker.elf'.format(ctx.env.BUILD_DIR)
