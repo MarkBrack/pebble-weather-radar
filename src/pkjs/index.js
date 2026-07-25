@@ -2,10 +2,10 @@ var renderer = require('./render');
 var rle = require('./rle');
 
 var CHUNK_SIZE = 128;
-var MAX_RADAR_FRAMES = 3;
+var MAX_RADAR_FRAMES = 5;
 var FRAME_PIXELS = renderer.DISPLAY_WIDTH * renderer.DISPLAY_HEIGHT;
 var MAX_RLE_FRAME_BYTES = rle.maxEncodedSize(FRAME_PIXELS);
-var MAX_BATCH_RLE_BYTES = 56000;
+var MAX_BATCH_RLE_BYTES = 72000;
 var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 var DEFAULT_HEADERS = {
   'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -116,18 +116,24 @@ function getLocation() {
 function normalizeRequest(payload) {
   var zoom = payload && payload.MAP_ZOOM ? payload.MAP_ZOOM : 8;
   var cropModeValue = payload && payload.MAP_CROP_MODE ? payload.MAP_CROP_MODE : 0;
+  var requestedBudget = payload && payload.RLE_BUDGET_BYTES;
   return {
     mapZoom: zoom,
-    cropMode: cropModeValue === 1 ? 'wide' : 'standard'
+    cropMode: cropModeValue === 1 ? 'wide' : 'standard',
+    rleBudgetBytes: requestedBudget > 0 ?
+      Math.min(requestedBudget, MAX_BATCH_RLE_BYTES) : MAX_BATCH_RLE_BYTES
   };
 }
 
 // --- Send background ---
 
-function sendBackground(bgRle) {
+function sendBackground(bgRle, batchBudget) {
   console.log('Sending BG RLE, size=' + bgRle.length);
   if (bgRle.length > MAX_RLE_FRAME_BYTES) {
     throw new Error('Map frame too large');
+  }
+  if (bgRle.length > batchBudget) {
+    throw new Error('Map exceeds watch memory');
   }
 
   return sendMessage({
@@ -200,15 +206,20 @@ function fetchRadarTimestamps() {
 	});
 }
 
-function collectRadarFrames(radarTimestamps, transport, values, bgRleLength) {
+function collectRadarFrames(radarTimestamps, transport, values, bgRleLength, batchBudget) {
 	var frameCount = radarTimestamps.length;
 	var i = 0;
 	var accepted = [];
 	var acceptedRadarBytes = 0;
+	var hasRain = false;
+
+	function batchResult() {
+		return { frames: accepted, hasRain: hasRain };
+	}
 
 	function renderNext() {
 		if (i >= frameCount) {
-			return accepted;
+			return batchResult();
 		}
 
 		var frame = radarTimestamps[i];
@@ -221,13 +232,21 @@ function collectRadarFrames(radarTimestamps, transport, values, bgRleLength) {
 				console.log('Skipping oversized radar frame, size=' + radarRle.length);
 				return renderNext();
 			}
-			if ((bgRleLength + acceptedRadarBytes + radarRle.length) > MAX_BATCH_RLE_BYTES) {
+			if ((bgRleLength + acceptedRadarBytes + radarRle.length) > batchBudget) {
 				console.log('Radar frame budget full after accepting ' + accepted.length + ' frame(s)');
-				return accepted;
+				return batchResult();
 			}
 
 			accepted.push(radarRle);
 			acceptedRadarBytes += radarRle.length;
+			if (!hasRain) {
+				for (var pixel = 0; pixel < result.paletteIndexed.length; pixel++) {
+					if (result.paletteIndexed[pixel] !== 0) {
+						hasRain = true;
+						break;
+					}
+				}
+			}
 			return renderNext();
 		});
 	}
@@ -235,17 +254,20 @@ function collectRadarFrames(radarTimestamps, transport, values, bgRleLength) {
 	return renderNext();
 }
 
-function sendRadarFrames(radarFrames) {
-	var chronological = radarFrames.slice().reverse();
-	var frameCount = chronological.length;
+function sendRadarFrames(batch) {
+	var radarFrames = batch.frames;
+	var frameCount = radarFrames.length;
 	var i = 0;
 
 	function sendNext() {
 		if (i >= frameCount) {
-			return sendBatchDone();
+			return sendMessage({
+				RADAR_BATCH_DONE: 1,
+				HAS_RAIN: batch.hasRain ? 1 : 0
+			});
 		}
 
-		var radarRle = chronological[i];
+		var radarRle = radarFrames[i];
 		var index = i;
 		i++;
 		return sendRadarFrame(radarRle, index, frameCount).then(sendNext);
@@ -291,12 +313,13 @@ function refreshFrame(request) {
         console.log('Background rendered');
 		var bgRle = rle.encode(bgResult.pebble8Bit);
         return queueStatus('Sending map...').then(function() {
-          return sendBackground(bgRle);
+          return sendBackground(bgRle, normalized.rleBudgetBytes);
         }).then(function() {
-		  // 2. Render newest candidates first, then send accepted frames oldest-to-newest.
+		  // 2. Render and send newest candidates first so capacity drops history.
 		  var values = bgResult.values;
           return queueStatus('Rendering radar...').then(function() {
-		    return collectRadarFrames(radarTimestamps, transport, values, bgRle.length);
+		    return collectRadarFrames(
+		      radarTimestamps, transport, values, bgRle.length, normalized.rleBudgetBytes);
           })
 		    .then(sendRadarFrames);
 		});

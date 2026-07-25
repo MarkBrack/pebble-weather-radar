@@ -7,7 +7,9 @@ A rain radar app for the **Pebble Time 2 (Emery)** smartwatch. It displays a liv
 ## Features
 
 - **Live rain radar** from [RainViewer](https://www.rainviewer.com/) overlaid on OpenStreetMap tiles
-- **Multiple time steps** — stores up to 3 recent radar frames, within a strict memory budget
+- **Multiple time steps** — stores up to 5 recent radar frames, within a strict memory budget
+- **Dry-area notice** — displays “No rain in your area” when every loaded overlay is clear
+- **Loading feedback** — displays “Getting radar data…” while overlays are arriving
 - **Frame navigation** — use the Up/Down buttons to step through recent radar frames
 - **Two crop modes** — Wide (zoom  out) and Standard (zoomed in), toggled with Select
 - **Frame position indicator** — shows current frame when multiple frames are loaded
@@ -19,21 +21,21 @@ A rain radar app for the **Pebble Time 2 (Emery)** smartwatch. It displays a liv
 
 ## How It Works
 
-The app is split between the phone (PebbleKit JS) and the watch (Moddable XS JavaScript runtime).
+The app is split between the phone (PebbleKit JS) and a native Pebble C watch app.
 
 ### Phone Side
 
 1. Fetches the user's GPS location (falls back to a hardcoded default)
 2. Downloads OpenStreetMap raster tiles and assembles a base map centred on the location
-3. Fetches the latest radar timestamps from the RainViewer API (up to 3 candidates)
+3. Fetches the latest radar timestamps from the RainViewer API (up to 5 candidates)
 4. Renders the background map once — remaps colours to the Pebble 64-colour palette, applies a wash for readability, draws a centre crosshair, and PackBits RLE-encodes the result
 5. For each radar time step, fetches the radar tile, classifies rain intensity into a compact 6-level palette, and PackBits RLE-encodes the overlay
 6. Sends the background as chunked messages, then sends each radar frame as chunked messages, followed by a batch-done signal
 
 ### Watch Side
 
-1. Receives the background into one exactly-sized native RLE buffer
-2. Receives each accepted radar frame into its own exactly-sized native RLE buffer
+1. Reserves one bounded 72 KB arena and advertises its actual capacity to the phone
+2. Receives the background and as many newest radar frames as fit into that arena
 3. On batch completion, composites the display: decodes the background RLE stream, then overlays the current radar frame using the rain palette
 4. Up/Down buttons navigate between stored frames; the display recomposites on each navigation step
 
@@ -46,13 +48,15 @@ directly into the display only when it needs to draw.
 PackBits uses literal blocks as well as repeated runs. A frame containing
 45,600 pixels therefore has a provable maximum encoded size of 45,957 bytes;
 the earlier pair-only RLE could grow to 91,200 bytes on rapidly changing
-colours. The watch enforces a 56,000-byte total retained-frame budget and the
-phone sends the newest frames that fit.
+colours. At startup, the native watch app reserves a single RLE arena capped at
+72,000 bytes. Allocation backs off safely if that full amount is unavailable.
+It advertises the resulting capacity to the phone, which sends the newest
+frames that fit. If capacity is reached anyway, the watch keeps the newest
+accepted frames and simply stops accepting older history.
 
-Retained RLE data uses native, exactly-sized allocations. The XS runtime is
-reserved only 16 KB for transient chunks, 12 KB for object slots, and 6 KB for
-the stack. This removes the previous 64 KB startup reservation that could fail
-after an OS update.
+Retained RLE data uses non-owning views within that arena, avoiding allocator
+fragmentation between refreshes. Decoding draws runs directly into the screen
+graphics context, so there is no retained raw framebuffer and no Alloy/XS heap.
 
 ### Rain Intensity Palette
 
@@ -92,8 +96,7 @@ pebble install --emulator emery --logs
 
 ```
 src/
-  c/           — C entry point (boots Moddable XS with custom heap config)
-  embeddedjs/  — Watch-side JavaScript (main app, RLE decoders)
+  c/           — Native watch app, bounded RLE arena and compositing decoder
   pkjs/        — Phone-side PebbleKit JS (fetch, render, send pipeline)
 scripts/       — Debug/render helpers
 ```
