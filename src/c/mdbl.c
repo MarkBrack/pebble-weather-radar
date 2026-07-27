@@ -221,12 +221,10 @@ static void layer_update(Layer *layer, GContext *ctx)
 			long age_seconds = (long)(now - s_radar[s_current_frame].timestamp);
 			long age_minutes = age_seconds > 0 ? (age_seconds + 30) / 60 : 0;
 			snprintf(age_text, sizeof(age_text), "-%ld min", age_minutes);
-			graphics_context_set_fill_color(ctx, GColorWhite);
-			graphics_fill_rect(ctx, GRect(2, 199, 74, 23), 3, GCornersAll);
 			graphics_context_set_text_color(ctx, GColorBlack);
 			graphics_draw_text(
-				ctx, age_text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-				GRect(5, 198, 68, 24),
+				ctx, age_text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+				GRect(3, 192, 78, 30),
 				GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 		}
 	}
