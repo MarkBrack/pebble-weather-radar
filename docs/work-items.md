@@ -39,11 +39,13 @@ Status: Done
 Playback advances through history every second and pauses for three seconds on
 the newest frame before looping. Pressing Up or Down resets the playback timer;
 automatic playback resumes after three seconds without another button press.
+Dry batches remain parked on the newest frame and do not animate.
 
 Acceptance:
 
 - A frame is shown for one second during normal playback.
 - The newest frame is shown for three seconds.
+- A dry batch does not animate.
 - Manual frame navigation is not immediately overridden by playback.
 - Refreshing radar data cancels the old playback timer.
 
@@ -164,4 +166,3 @@ Cloudflare notes:
   consume the Workers quota](https://developers.cloudflare.com/pages/functions/pricing/).
 - Function routes should be scoped so unrelated static assets do not invoke the
   Worker.
-

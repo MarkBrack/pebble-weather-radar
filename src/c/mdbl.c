@@ -357,12 +357,14 @@ static void inbox_received(DictionaryIterator *iterator, void *context)
 	}
 	else if (dict_find(iterator, MESSAGE_KEY_RADAR_BATCH_DONE)) {
 		Tuple *has_rain = dict_find(iterator, MESSAGE_KEY_HAS_RAIN);
-		s_current_frame = s_radar_count > 0 ? s_radar_count - 1 : 0;
 		s_loading_radar = false;
 		s_no_rain = has_rain && has_rain->value->uint32 == 0;
+		s_current_frame = s_no_rain || s_radar_count == 0
+			? 0
+			: s_radar_count - 1;
 		set_status("Ready");
 		layer_mark_dirty(s_layer);
-		if (s_radar_count > 1) {
+		if (s_radar_count > 1 && !s_no_rain) {
 			schedule_animation(FRAME_INTERVAL_MS);
 		}
 	}
@@ -401,7 +403,7 @@ static void animation_timer_callback(void *context)
 	(void)context;
 	s_animation_timer = NULL;
 
-	if (s_radar_count <= 1 || s_loading_radar) {
+	if (s_radar_count <= 1 || s_loading_radar || s_no_rain) {
 		return;
 	}
 	if (s_current_frame == 0) {
@@ -427,7 +429,7 @@ static void schedule_animation(uint32_t delay_ms)
 
 static void resume_animation_after_navigation(void)
 {
-	if (s_radar_count > 1) {
+	if (s_radar_count > 1 && !s_no_rain) {
 		schedule_animation(MANUAL_RESUME_MS);
 	}
 }
