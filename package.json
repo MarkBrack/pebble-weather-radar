@@ -31,6 +31,7 @@
       "BG_CHUNK",
       "RADAR_FRAME_COUNT",
       "RADAR_FRAME_INDEX",
+      "RADAR_FRAME_TIME",
       "RADAR_TOTAL_BYTES",
       "RADAR_OFFSET",
       "RADAR_CHUNK",

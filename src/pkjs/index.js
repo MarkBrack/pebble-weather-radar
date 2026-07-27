@@ -156,7 +156,7 @@ function sendBackground(bgRle, batchBudget) {
 
 // --- Send radar frames ---
 
-function sendRadarFrame(radarRle, index, count) {
+function sendRadarFrame(radarRle, frameTime, index, count) {
   console.log('Sending radar frame ' + (index + 1) + '/' + count + ', size=' + radarRle.length);
   if (radarRle.length > MAX_RLE_FRAME_BYTES) {
     throw new Error('Radar frame too large');
@@ -165,6 +165,7 @@ function sendRadarFrame(radarRle, index, count) {
   return sendMessage({
     RADAR_FRAME_INDEX: index,
     RADAR_FRAME_COUNT: count,
+    RADAR_FRAME_TIME: frameTime,
     RADAR_TOTAL_BYTES: radarRle.length
   }).then(function() {
     var offset = 0;
@@ -237,7 +238,10 @@ function collectRadarFrames(radarTimestamps, transport, values, bgRleLength, bat
 				return batchResult();
 			}
 
-			accepted.push(radarRle);
+			accepted.push({
+				rle: radarRle,
+				time: frame.time
+			});
 			acceptedRadarBytes += radarRle.length;
 			if (!hasRain) {
 				for (var pixel = 0; pixel < result.paletteIndexed.length; pixel++) {
@@ -267,10 +271,10 @@ function sendRadarFrames(batch) {
 			});
 		}
 
-		var radarRle = radarFrames[i];
+		var radarFrame = radarFrames[i];
 		var index = i;
 		i++;
-		return sendRadarFrame(radarRle, index, frameCount).then(sendNext);
+		return sendRadarFrame(radarFrame.rle, radarFrame.time, index, frameCount).then(sendNext);
 	}
 
 	return sendNext();

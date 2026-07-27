@@ -10,9 +10,11 @@ A rain radar app for the **Pebble Time 2 (Emery)** smartwatch. It displays a liv
 - **Multiple time steps** — stores up to 5 recent radar frames, within a strict memory budget
 - **Dry-area notice** — displays “No rain in your area” when every loaded overlay is clear
 - **Loading feedback** — displays “Getting radar data…” while overlays are arriving
+- **Animated radar history** — advances every second, pauses on the latest frame for 3 seconds, and resumes 3 seconds after manual navigation
 - **Frame navigation** — use the Up/Down buttons to step through recent radar frames
 - **Two crop modes** — Wide (zoom  out) and Standard (zoomed in), toggled with Select
-- **Frame position indicator** — shows current frame when multiple frames are loaded
+- **Frame position indicator** — ordered oldest-to-newest from left to right
+- **Frame age** — shows the selected radar image's age in minutes
 
 ## Target Hardware
 
@@ -37,7 +39,7 @@ The app is split between the phone (PebbleKit JS) and a native Pebble C watch ap
 1. Reserves one bounded 72 KB arena and advertises its actual capacity to the phone
 2. Receives the background and as many newest radar frames as fit into that arena
 3. On batch completion, composites the display: decodes the background RLE stream, then overlays the current radar frame using the rain palette
-4. Up/Down buttons navigate between stored frames; the display recomposites on each navigation step
+4. Animates from the oldest stored frame to the newest; Up/Down navigation temporarily pauses the animation
 
 ### Memory model
 

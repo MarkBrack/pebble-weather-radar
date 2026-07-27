@@ -2,8 +2,10 @@
 #include "message_keys.auto.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define FRAME_WIDTH 200
 #define FRAME_HEIGHT 228
@@ -12,10 +14,14 @@
 #define MAX_RADAR_FRAMES 5
 #define RLE_ARENA_BYTES 72000
 #define RLE_ARENA_RETRY_BYTES 1024
+#define FRAME_INTERVAL_MS 1000
+#define LATEST_FRAME_PAUSE_MS 3000
+#define MANUAL_RESUME_MS 3000
 
 typedef struct {
 	uint8_t *data;
 	uint32_t length;
+	time_t timestamp;
 } RLEFrame;
 
 typedef struct {
@@ -28,6 +34,7 @@ typedef struct {
 static Window *s_window;
 static Layer *s_layer;
 static AppTimer *s_refresh_timer;
+static AppTimer *s_animation_timer;
 static uint8_t *s_arena;
 static uint32_t s_arena_capacity;
 static uint32_t s_arena_used;
@@ -42,6 +49,8 @@ static bool s_no_rain;
 static bool s_loading_radar;
 static RLEReceive s_receive;
 static char s_status[64] = "Waiting for phone...";
+
+static void schedule_animation(uint32_t delay_ms);
 
 static const uint8_t s_radar_palette[] = {
 	0x00, 0xEF, 0xCB, 0xC6, 0xFC, 0xF8, 0xE0
@@ -77,6 +86,10 @@ static void reserve_arena(void)
 
 static void reset_batch(void)
 {
+	if (s_animation_timer) {
+		app_timer_cancel(s_animation_timer);
+		s_animation_timer = NULL;
+	}
 	s_arena_used = 0;
 	memset(&s_background, 0, sizeof(s_background));
 	memset(s_radar, 0, sizeof(s_radar));
@@ -184,6 +197,7 @@ static void draw_map_message(GContext *ctx, const char *message)
 
 static void layer_update(Layer *layer, GContext *ctx)
 {
+	char age_text[16];
 	graphics_context_set_fill_color(ctx, GColorWhite);
 	graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
 
@@ -202,13 +216,25 @@ static void layer_update(Layer *layer, GContext *ctx)
 	}
 	if (s_current_frame < s_radar_count) {
 		draw_rle(ctx, &s_radar[s_current_frame], true);
+		if (s_radar[s_current_frame].timestamp > 0) {
+			time_t now = time(NULL);
+			long age_seconds = (long)(now - s_radar[s_current_frame].timestamp);
+			long age_minutes = age_seconds > 0 ? (age_seconds + 30) / 60 : 0;
+			snprintf(age_text, sizeof(age_text), "-%ld min", age_minutes);
+			graphics_context_set_text_color(ctx, GColorBlack);
+			graphics_draw_text(
+				ctx, age_text, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+				GRect(4, 202, 62, 20),
+				GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+		}
 	}
 	if (s_radar_count > 1) {
 		int16_t start_x = (FRAME_WIDTH - ((s_radar_count * 7) - 2)) / 2;
 		for (uint8_t i = 0; i < s_radar_count; i++) {
+			uint8_t frame_index = s_radar_count - 1 - i;
 			graphics_context_set_fill_color(ctx, GColorBlack);
 			graphics_fill_rect(ctx, GRect(start_x + (i * 7), 218, 5, 5), 0, GCornerNone);
-			if (i == s_current_frame) {
+			if (frame_index == s_current_frame) {
 				graphics_context_set_fill_color(ctx, GColorWhite);
 				graphics_fill_rect(ctx, GRect(start_x + (i * 7) + 1, 219, 3, 3), 0, GCornerNone);
 			}
@@ -289,6 +315,7 @@ static void receive_chunk(
 static void begin_radar(DictionaryIterator *iterator)
 {
 	uint32_t index = tuple_uint(iterator, MESSAGE_KEY_RADAR_FRAME_INDEX, UINT32_MAX);
+	uint32_t timestamp = tuple_uint(iterator, MESSAGE_KEY_RADAR_FRAME_TIME, 0);
 	uint32_t total = tuple_uint(iterator, MESSAGE_KEY_RADAR_TOTAL_BYTES, 0);
 	uint8_t *data;
 
@@ -303,6 +330,7 @@ static void begin_radar(DictionaryIterator *iterator)
 	s_receive.data = data;
 	s_receive.total = total;
 	s_receive.radar_index = (int8_t)index;
+	s_radar[index].timestamp = (time_t)timestamp;
 	s_loading_radar = true;
 	set_status("Receiving radar...");
 }
@@ -329,11 +357,14 @@ static void inbox_received(DictionaryIterator *iterator, void *context)
 	}
 	else if (dict_find(iterator, MESSAGE_KEY_RADAR_BATCH_DONE)) {
 		Tuple *has_rain = dict_find(iterator, MESSAGE_KEY_HAS_RAIN);
-		s_current_frame = 0;
+		s_current_frame = s_radar_count > 0 ? s_radar_count - 1 : 0;
 		s_loading_radar = false;
 		s_no_rain = has_rain && has_rain->value->uint32 == 0;
 		set_status("Ready");
 		layer_mark_dirty(s_layer);
+		if (s_radar_count > 1) {
+			schedule_animation(FRAME_INTERVAL_MS);
+		}
 	}
 }
 
@@ -364,6 +395,43 @@ static void refresh_timer_callback(void *context)
 	s_refresh_timer = app_timer_register(240000, refresh_timer_callback, NULL);
 }
 
+static void animation_timer_callback(void *context)
+{
+	uint32_t next_delay = FRAME_INTERVAL_MS;
+	(void)context;
+	s_animation_timer = NULL;
+
+	if (s_radar_count <= 1 || s_loading_radar) {
+		return;
+	}
+	if (s_current_frame == 0) {
+		s_current_frame = s_radar_count - 1;
+	}
+	else {
+		s_current_frame--;
+		if (s_current_frame == 0) {
+			next_delay = LATEST_FRAME_PAUSE_MS;
+		}
+	}
+	layer_mark_dirty(s_layer);
+	schedule_animation(next_delay);
+}
+
+static void schedule_animation(uint32_t delay_ms)
+{
+	if (s_animation_timer) {
+		app_timer_cancel(s_animation_timer);
+	}
+	s_animation_timer = app_timer_register(delay_ms, animation_timer_callback, NULL);
+}
+
+static void resume_animation_after_navigation(void)
+{
+	if (s_radar_count > 1) {
+		schedule_animation(MANUAL_RESUME_MS);
+	}
+}
+
 static void up_click(ClickRecognizerRef recognizer, void *context)
 {
 	(void)recognizer;
@@ -372,6 +440,7 @@ static void up_click(ClickRecognizerRef recognizer, void *context)
 		s_current_frame--;
 		layer_mark_dirty(s_layer);
 	}
+	resume_animation_after_navigation();
 }
 
 static void down_click(ClickRecognizerRef recognizer, void *context)
@@ -382,6 +451,7 @@ static void down_click(ClickRecognizerRef recognizer, void *context)
 		s_current_frame++;
 		layer_mark_dirty(s_layer);
 	}
+	resume_animation_after_navigation();
 }
 
 static void select_click(ClickRecognizerRef recognizer, void *context)
@@ -422,6 +492,9 @@ static void deinit(void)
 {
 	if (s_refresh_timer) {
 		app_timer_cancel(s_refresh_timer);
+	}
+	if (s_animation_timer) {
+		app_timer_cancel(s_animation_timer);
 	}
 	app_message_deregister_callbacks();
 	layer_destroy(s_layer);
