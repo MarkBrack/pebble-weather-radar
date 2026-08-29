@@ -23,6 +23,10 @@ var MAP_COLORS = {
   crosshair: [255, 255, 255]
 };
 
+var MAP_CLASS_LAND = 0;
+var MAP_CLASS_DETAIL = 1;
+var MAP_CLASS_WATER = 2;
+
 var RAIN_COLORS = {
   drizzle: [170, 255, 255],
   light: [0, 170, 255],
@@ -263,8 +267,10 @@ function scaleMapSourceToBase(source, plan, baseSize) {
 }
 
 function applyPebbleMapStyle(data) {
+  var classes = new Uint8Array(data.length / 4);
   var i;
-  for (i = 0; i < data.length; i += 4) {
+  var pixel;
+  for (i = 0, pixel = 0; i < data.length; i += 4, pixel++) {
     var r = data[i];
     var g = data[i + 1];
     var b = data[i + 2];
@@ -275,14 +281,19 @@ function applyPebbleMapStyle(data) {
     if ((b > 150 && b >= g + 8 && b >= r + 20) ||
         (b > 180 && g > 180 && r < 210)) {
       target = MAP_COLORS.water;
+      classes[pixel] = MAP_CLASS_WATER;
     } else if (luminance > 205 || chroma < 16) {
       target = MAP_COLORS.land;
+      classes[pixel] = MAP_CLASS_LAND;
     } else if (g >= r - 8 && g >= b + 12 && luminance > 140) {
       target = MAP_COLORS.detail;
+      classes[pixel] = MAP_CLASS_DETAIL;
     } else if (r > 210 && g > 210 && b < 225) {
       target = MAP_COLORS.detail;
+      classes[pixel] = MAP_CLASS_DETAIL;
     } else {
       target = MAP_COLORS.land;
+      classes[pixel] = MAP_CLASS_LAND;
     }
 
     data[i] = target[0];
@@ -290,6 +301,7 @@ function applyPebbleMapStyle(data) {
     data[i + 2] = target[2];
     data[i + 3] = 255;
   }
+  return classes;
 }
 
 function radarBucketForPixel(r, g, b, alpha) {
@@ -473,6 +485,52 @@ function cropAndScaleForPebble(composite, values) {
   }
 
   return downsample2x(cropped, values.cropWidth, values.cropHeight).rgba;
+}
+
+function cropAndScaleMapForPebble(composite, classes, values) {
+  var left = Math.floor((values.baseSize - values.cropWidth) / 2);
+  var top = Math.floor((values.baseSize - values.cropHeight) / 2);
+  var cropped = cropBuffer(composite, values.baseSize, left, top, values.cropWidth, values.cropHeight);
+
+  if (values.cropScale === 1) {
+    return cropped;
+  }
+
+  if (values.cropScale !== 2) {
+    throw new Error('Unsupported crop scale ' + values.cropScale);
+  }
+
+  var output = downsample2x(cropped, values.cropWidth, values.cropHeight).rgba;
+  var outputWidth = Math.floor(values.cropWidth / 2);
+  var outputHeight = Math.floor(values.cropHeight / 2);
+  var x;
+  var y;
+
+  // Preserve a water polygon when it covers at least half of a 2x2 output
+  // block rather than averaging white water into the green landscape. This
+  // avoids widening isolated blue detail. The crosshair is drawn
+  // after this step, so it cannot be mistaken for water and widened.
+  for (y = 0; y < outputHeight; y++) {
+    var sourceY = top + (y * 2);
+    for (x = 0; x < outputWidth; x++) {
+      var sourceX = left + (x * 2);
+      var classIndex = (sourceY * values.baseSize) + sourceX;
+      var waterPixels = 0;
+      waterPixels += classes[classIndex] === MAP_CLASS_WATER ? 1 : 0;
+      waterPixels += classes[classIndex + 1] === MAP_CLASS_WATER ? 1 : 0;
+      waterPixels += classes[classIndex + values.baseSize] === MAP_CLASS_WATER ? 1 : 0;
+      waterPixels += classes[classIndex + values.baseSize + 1] === MAP_CLASS_WATER ? 1 : 0;
+      if (waterPixels >= 2) {
+        var outputIndex = ((y * outputWidth) + x) * 4;
+        output[outputIndex] = MAP_COLORS.water[0];
+        output[outputIndex + 1] = MAP_COLORS.water[1];
+        output[outputIndex + 2] = MAP_COLORS.water[2];
+        output[outputIndex + 3] = 255;
+      }
+    }
+  }
+
+  return output;
 }
 
 function quantizeToPebble8Bit(rgba) {
@@ -698,9 +756,9 @@ function renderBackgroundOnly(transport, options) {
     var mapSource = assembleMapSource(plan, tileImages);
     var scaledMap = scaleMapSourceToBase(mapSource, plan, values.baseSize);
     var composite = scaledMap.rgba.slice(0);
-    applyPebbleMapStyle(composite);
-    drawCrosshairIntoBuffer(composite, values.baseSize, values.baseSize);
-    var pebbleRgba = cropAndScaleForPebble(composite, values);
+    var mapClasses = applyPebbleMapStyle(composite);
+    var pebbleRgba = cropAndScaleMapForPebble(composite, mapClasses, values);
+    drawCrosshairIntoBuffer(pebbleRgba, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     var pebble8Bit = quantizeToPebble8Bit(pebbleRgba);
 
     return {
@@ -734,6 +792,8 @@ module.exports = {
   RAIN_COLORS: RAIN_COLORS,
   getRenderValues: getRenderValues,
   buildMapTilePlan: buildMapTilePlan,
+  applyPebbleMapStyle: applyPebbleMapStyle,
+  cropAndScaleMapForPebble: cropAndScaleMapForPebble,
   renderScene: renderScene,
   renderBackgroundOnly: renderBackgroundOnly,
   renderRadarOverlay: renderRadarOverlay

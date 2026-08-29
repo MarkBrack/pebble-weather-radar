@@ -5,7 +5,7 @@
   "keywords": ["pebble-app"],
   "private": true,
   "scripts": {
-    "test": "node scripts/test-rle.js",
+    "test": "node scripts/test-rle.js && node scripts/test-render.js",
     "build:watch": "powershell -ExecutionPolicy Bypass -File scripts/build-watch.ps1"
   },
   "dependencies": {
