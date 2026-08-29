@@ -48,6 +48,26 @@ module.exports = [
     ]
   },
   {
+    type: 'section',
+    items: [
+      {
+        type: 'heading',
+        defaultValue: 'Test Tile Server'
+      },
+      {
+        type: 'input',
+        messageKey: 'TILE_SERVER_URL',
+        label: 'Server URL',
+        description: 'Optional. Enter the base URL of the Pebble tile server. Leave blank to use the normal OpenStreetMap map.',
+        defaultValue: '',
+        attributes: {
+          type: 'url',
+          placeholder: 'http://192.168.1.10:8080'
+        }
+      }
+    ]
+  },
+  {
     type: 'submit',
     defaultValue: 'Save Settings'
   }

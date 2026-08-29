@@ -8,13 +8,22 @@ function sendJson(response, status, payload) {
   const body = Buffer.from(JSON.stringify(payload));
   response.writeHead(status, {
     'Content-Type': 'application/json',
-    'Content-Length': body.length
+    'Content-Length': body.length,
+    'Access-Control-Allow-Origin': '*'
   });
   response.end(body);
 }
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+  if (request.method === 'OPTIONS') {
+    response.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'If-None-Match'
+    });
+    return response.end();
+  }
   if (url.pathname === '/healthz') return sendJson(response, 200, { status: 'ok' });
 
   const match = url.pathname.match(/^\/tiles\/v1\/(\d+)\/(\d+)\/(\d+)\.png$/);
@@ -33,7 +42,11 @@ const server = createServer(async (request, response) => {
     const result = await service.getTile(coords);
     const etag = etagFor(result.png);
     if (request.headers['if-none-match'] === etag) {
-      response.writeHead(304, { ETag: etag });
+      response.writeHead(304, {
+        ETag: etag,
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        'Access-Control-Allow-Origin': '*'
+      });
       return response.end();
     }
     response.writeHead(200, {
@@ -42,7 +55,8 @@ const server = createServer(async (request, response) => {
       'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
       ETag: etag,
       'X-Tile-Cache': result.cache,
-      'X-Map-Attribution': 'OpenStreetMap contributors'
+      'X-Map-Attribution': 'OpenStreetMap contributors',
+      'Access-Control-Allow-Origin': '*'
     });
     response.end(result.png);
   } catch (error) {

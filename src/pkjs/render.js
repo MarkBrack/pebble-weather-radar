@@ -96,6 +96,7 @@ function getRenderValues(options) {
     cropWidth: DISPLAY_WIDTH * cropScale,
     cropHeight: DISPLAY_HEIGHT * cropScale,
     mapStyle: options.mapStyle || 'osm_standard',
+    tileServerUrl: options.tileServerUrl || null,
     mapDetailMode: mapDetailMode,
     detailScale: detailScale,
     baseSize: options.baseSize || BASE_SIZE,
@@ -108,7 +109,14 @@ function buildMapTilePlan(values) {
   var hiZoom = values.mapDetailMode === 'sharper' ? values.mapZoom + 1 : values.mapZoom;
   var sourceWidth = values.baseSize * values.detailScale;
   var sourceHeight = values.baseSize * values.detailScale;
-  var tileStyle = getTileStyle(values.mapStyle);
+  var tileStyle = values.tileServerUrl ? {
+    label: 'Pebble Tile Server',
+    attribution: 'OpenStreetMap',
+    prestyled: true,
+    url: function(z, x, y) {
+      return values.tileServerUrl + '/tiles/v1/' + z + '/' + x + '/' + y + '.png';
+    }
+  } : getTileStyle(values.mapStyle);
   var center = latLonToWorldPixels(values.lat, values.lon, hiZoom);
   var left = center.x - sourceWidth / 2;
   var top = center.y - sourceHeight / 2;
@@ -301,6 +309,29 @@ function applyPebbleMapStyle(data) {
     data[i + 2] = target[2];
     data[i + 3] = 255;
   }
+  return classes;
+}
+
+function classifyPrestyledMap(data) {
+  var classes = new Uint8Array(data.length / 4);
+  var i;
+  var pixel;
+
+  for (i = 0, pixel = 0; i < data.length; i += 4, pixel++) {
+    if (data[i] === MAP_COLORS.water[0] &&
+        data[i + 1] === MAP_COLORS.water[1] &&
+        data[i + 2] === MAP_COLORS.water[2]) {
+      classes[pixel] = MAP_CLASS_WATER;
+    } else if (data[i] === MAP_COLORS.detail[0] &&
+               data[i + 1] === MAP_COLORS.detail[1] &&
+               data[i + 2] === MAP_COLORS.detail[2]) {
+      classes[pixel] = MAP_CLASS_DETAIL;
+    } else {
+      classes[pixel] = MAP_CLASS_LAND;
+    }
+    data[i + 3] = 255;
+  }
+
   return classes;
 }
 
@@ -756,7 +787,8 @@ function renderBackgroundOnly(transport, options) {
     var mapSource = assembleMapSource(plan, tileImages);
     var scaledMap = scaleMapSourceToBase(mapSource, plan, values.baseSize);
     var composite = scaledMap.rgba.slice(0);
-    var mapClasses = applyPebbleMapStyle(composite);
+    var mapClasses = plan.tileStyle.prestyled ?
+      classifyPrestyledMap(composite) : applyPebbleMapStyle(composite);
     var pebbleRgba = cropAndScaleMapForPebble(composite, mapClasses, values);
     drawCrosshairIntoBuffer(pebbleRgba, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     var pebble8Bit = quantizeToPebble8Bit(pebbleRgba);
@@ -793,6 +825,7 @@ module.exports = {
   getRenderValues: getRenderValues,
   buildMapTilePlan: buildMapTilePlan,
   applyPebbleMapStyle: applyPebbleMapStyle,
+  classifyPrestyledMap: classifyPrestyledMap,
   cropAndScaleMapForPebble: cropAndScaleMapForPebble,
   renderScene: renderScene,
   renderBackgroundOnly: renderBackgroundOnly,

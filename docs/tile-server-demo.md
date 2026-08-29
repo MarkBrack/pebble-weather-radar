@@ -32,6 +32,27 @@ npm run demo:lake-como
 npm start
 ```
 
+## Test on a phone and watch
+
+The demo branch contains an optional **Test Tile Server → Server URL** field in
+the normal Pebble configuration screen. To use it:
+
+1. Start the server with `npm start` from `tile-server/` and leave it running.
+2. Find the computer's LAN address and verify on the phone that a URL such as
+   `http://<computer-ip>:8080/tiles/v1/8/134/90.png` displays a map tile.
+3. Run `pebble build`, then install `build/pebble-weather-radar.pbw` on the test
+   phone/watch in the usual way.
+4. Open Rain Radar's configuration and enter only the server base URL, for
+   example `http://192.168.1.10:8080`.
+5. For the lake test, enable manual location and enter latitude `45.99` and
+   longitude `9.26`.
+
+The server URL must be reachable by the phone; `localhost` refers to the phone
+and will not work. Leaving the field blank switches the test build back to the
+normal public OSM raster tiles. The server enables cross-origin tile requests,
+and the phone renderer recognises its PNGs as pre-styled so it does not turn
+white water or black labels back into green land.
+
 ## Endpoint
 
 ```text
@@ -85,9 +106,11 @@ public launch we should either confirm the expected traffic is acceptable, use
 another Shortbread provider, or generate/host our own regional vector source.
 The upstream URL is therefore configurable.
 
-## Next integration step
+## Watch integration
 
-Add a `pebble_server` map style in `src/pkjs/render.js` whose URL is the server
-endpoint. The existing tile assembly code can consume these PNGs unchanged.
-Keep the current raster source behind a feature flag until Lake Como, a coast,
-London, and a rural fixture have been checked on the physical watch.
+The demo branch includes a `pebble_server` map style and exposes its base URL
+in the app's Clay configuration. It bypasses raster recolouring for these
+pre-styled tiles.
+Leave the setting blank to retain the standard raster source. Keep that source
+as the default until Lake Como, a coast, London, and a rural fixture have been
+checked on the physical watch.

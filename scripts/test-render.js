@@ -28,6 +28,19 @@ var classes = renderer.applyPebbleMapStyle(source);
 assert.deepStrictEqual(Array.from(source.slice(0, 3)), renderer.MAP_COLORS.water);
 assert.deepStrictEqual(Array.from(source.slice(4, 7)), renderer.MAP_COLORS.land);
 
+var prestyled = new Uint8Array([
+  255, 255, 255, 255,
+  0, 0, 0, 255,
+  170, 255, 170, 255
+]);
+var prestyledClasses = renderer.classifyPrestyledMap(prestyled);
+assert.deepStrictEqual(Array.from(prestyled), [
+  255, 255, 255, 255,
+  0, 0, 0, 255,
+  170, 255, 170, 255
+]);
+assert.deepStrictEqual(Array.from(prestyledClasses), [2, 0, 1]);
+
 // In wide mode, retain narrow water polygons instead of averaging them into
 // green land. Requiring half of the source block avoids widening one-pixel map
 // details which happen to use a similar blue.

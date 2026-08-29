@@ -5,7 +5,7 @@
   "keywords": ["pebble-app"],
   "private": true,
   "scripts": {
-    "test": "node scripts/test-rle.js && node scripts/test-render.js",
+    "test": "node scripts/test-rle.js && node scripts/test-render.js && node scripts/test-tile-source.js",
     "build:watch": "powershell -ExecutionPolicy Bypass -File scripts/build-watch.ps1"
   },
   "dependencies": {
@@ -43,7 +43,8 @@
       "STATUS_TEXT",
       "MANUAL_LOCATION",
       "MANUAL_LATITUDE",
-      "MANUAL_LONGITUDE"
+      "MANUAL_LONGITUDE",
+      "TILE_SERVER_URL"
     ],
     "resources": {
       "media": []

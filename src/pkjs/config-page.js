@@ -6,8 +6,17 @@ module.exports = function() {
     var manual = config.getItemByMessageKey('MANUAL_LOCATION');
     var latitude = config.getItemByMessageKey('MANUAL_LATITUDE');
     var longitude = config.getItemByMessageKey('MANUAL_LONGITUDE');
+    var tileServer = config.getItemByMessageKey('TILE_SERVER_URL');
 
     form.addEventListener('submit', function(event) {
+      var tileServerValue = (tileServer.get() || '').trim();
+      if (tileServerValue && !/^https?:\/\/[^\s]+$/i.test(tileServerValue)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        alert('Enter a complete tile server URL beginning with http:// or https://.');
+        return;
+      }
+
       if (!manual.get()) return;
 
       var latitudeValue = latitude.get();
