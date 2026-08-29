@@ -1,0 +1,13 @@
+services:
+  pebble-tiles:
+    build: ./tile-server
+    ports:
+      - "8080:8080"
+    environment:
+      OSM_USER_AGENT: "pebble-weather-radar-tile-demo/0.1 (+https://github.com/MarkBrack/pebble-weather-radar)"
+    volumes:
+      - pebble-tile-cache:/data/cache
+    restart: unless-stopped
+
+volumes:
+  pebble-tile-cache:

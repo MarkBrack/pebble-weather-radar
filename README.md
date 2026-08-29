@@ -109,3 +109,9 @@ scripts/       — Debug/render helpers
 
 - **Base map:** [OpenStreetMap](https://www.openstreetmap.org/) raster tiles
 - **Radar:** [RainViewer API](https://www.rainviewer.com/api.html) (free public weather radar)
+
+## Experimental vector tile renderer
+
+The `demo/vector-tile-server` branch includes a Dockerized proof of concept
+that converts semantic OSM Shortbread vector tiles into tiny five-colour PNG
+slippy tiles. See [docs/tile-server-demo.md](docs/tile-server-demo.md).
