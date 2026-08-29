@@ -1,5 +1,10 @@
 var renderer = require('./render');
 var rle = require('./rle');
+var locationSettings = require('./location');
+var Clay = require('@rebble/clay');
+var clayConfig = require('./config');
+var configPage = require('./config-page');
+var clay = new Clay(clayConfig, configPage, { autoHandleEvents: false });
 
 var CHUNK_SIZE = 128;
 var MAX_RADAR_FRAMES = 5;
@@ -82,6 +87,16 @@ function queueStatus(message) {
 
 function getLocation() {
   return new Promise(function(resolve) {
+    var manualLocation = locationSettings.getManualLocation(localStorage);
+    if (manualLocation.coordinates) {
+      console.log('Using manually configured location');
+      resolve(manualLocation.coordinates);
+      return;
+    }
+    if (manualLocation.enabled) {
+      console.log('Manual location is invalid, using phone location');
+    }
+
     var settled = false;
     var fallbackTimer = setTimeout(function() {
       if (settled) return;
@@ -351,6 +366,21 @@ Pebble.addEventListener('ready', function() {
   }, function(e) {
     console.log('Phone greeting failed: ' + (e && e.message ? e.message : JSON.stringify(e)));
   });
+});
+
+Pebble.addEventListener('showConfiguration', function() {
+  Pebble.openURL(clay.generateUrl());
+});
+
+Pebble.addEventListener('webviewclosed', function(event) {
+  if (!event || !event.response) return;
+
+  try {
+    clay.getSettings(event.response, false);
+    console.log('Saved location settings');
+  } catch (error) {
+    console.log('Could not save location settings: ' + error.message);
+  }
 });
 
 Pebble.addEventListener('appmessage', function(event) {

@@ -7,6 +7,7 @@ A rain radar app for the **Pebble Time 2 (Emery)** smartwatch. It displays a liv
 ## Features
 
 - **Live rain radar** from [RainViewer](https://www.rainviewer.com/) overlaid on OpenStreetMap tiles
+- **Configurable location** — use phone GPS or enter a fixed latitude and longitude in the Pebble phone app
 - **Multiple time steps** — stores up to 5 recent radar frames, within a strict memory budget
 - **Dry-area notice** — displays “No rain in your area” when every loaded overlay is clear
 - **Loading feedback** — displays “Getting radar data…” while overlays are arriving
@@ -27,7 +28,7 @@ The app is split between the phone (PebbleKit JS) and a native Pebble C watch ap
 
 ### Phone Side
 
-1. Fetches the user's GPS location (falls back to a hardcoded default)
+1. Uses manually configured coordinates when enabled; otherwise fetches the user's GPS location (falling back to a hardcoded default)
 2. Downloads OpenStreetMap raster tiles and assembles a base map centred on the location
 3. Fetches the latest radar timestamps from the RainViewer API (up to 5 candidates)
 4. Renders the background map once — remaps colours to the Pebble 64-colour palette, applies a wash for readability, draws a centre crosshair, and PackBits RLE-encodes the result
@@ -76,6 +77,7 @@ graphics context, so there is no retained raw framebuffer and no Alloy/XS heap.
 The Pebble SDK and CLI must be installed inside WSL. From Windows PowerShell:
 
 ```powershell
+npm install
 npm test
 npm run build:watch
 # Force a clean Pebble build when needed:

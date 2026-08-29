@@ -1,14 +1,16 @@
 {
   "name": "rain-radar",
   "author": "Mark Brackenborough",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "keywords": ["pebble-app"],
   "private": true,
   "scripts": {
     "test": "node scripts/test-rle.js",
     "build:watch": "powershell -ExecutionPolicy Bypass -File scripts/build-watch.ps1"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  },
   "pebble": {
     "displayName": "Rain Radar",
     "uuid": "45f7d2b8-174e-4793-8e10-b2037c4ec4ed",
@@ -16,7 +18,7 @@
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": ["emery"],
-    "capabilities": ["location"],
+    "capabilities": ["location", "configurable"],
     "watchapp": {
       "watchface": false
     },
@@ -38,7 +40,10 @@
       "RADAR_BATCH_DONE",
       "HAS_RAIN",
       "RLE_BUDGET_BYTES",
-      "STATUS_TEXT"
+      "STATUS_TEXT",
+      "MANUAL_LOCATION",
+      "MANUAL_LATITUDE",
+      "MANUAL_LONGITUDE"
     ],
     "resources": {
       "media": []

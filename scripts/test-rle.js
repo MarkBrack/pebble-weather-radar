@@ -2,6 +2,7 @@
 
 var assert = require('assert');
 var rle = require('../src/pkjs/rle');
+var location = require('../src/pkjs/location');
 
 function decode(encoded) {
   var output = [];
@@ -47,3 +48,44 @@ for (i = 0; i < random.length; i++) {
 roundTrip(random);
 
 console.log('RLE tests passed; worst-case frame bytes=' + rle.maxEncodedSize(pixelCount));
+
+function assertCoordinates(settings, expectedLatitude, expectedLongitude) {
+  var coordinates = location.coordinatesFromSettings(settings);
+  assert.ok(coordinates, 'expected valid manual coordinates');
+  assert.strictEqual(coordinates.latitude, expectedLatitude);
+  assert.strictEqual(coordinates.longitude, expectedLongitude);
+}
+
+assertCoordinates({
+  MANUAL_LOCATION: true,
+  MANUAL_LATITUDE: '54.623',
+  MANUAL_LONGITUDE: '-1.302'
+}, 54.623, -1.302);
+assertCoordinates({
+  MANUAL_LOCATION: 1,
+  MANUAL_LATITUDE: '-90',
+  MANUAL_LONGITUDE: '180'
+}, -90, 180);
+
+assert.strictEqual(location.coordinatesFromSettings({
+  MANUAL_LOCATION: false,
+  MANUAL_LATITUDE: '54.623',
+  MANUAL_LONGITUDE: '-1.302'
+}), null);
+assert.strictEqual(location.coordinatesFromSettings({
+  MANUAL_LOCATION: true,
+  MANUAL_LATITUDE: '',
+  MANUAL_LONGITUDE: '-1.302'
+}), null);
+assert.strictEqual(location.coordinatesFromSettings({
+  MANUAL_LOCATION: true,
+  MANUAL_LATITUDE: '91',
+  MANUAL_LONGITUDE: '0'
+}), null);
+assert.strictEqual(location.coordinatesFromSettings({
+  MANUAL_LOCATION: true,
+  MANUAL_LATITUDE: '0',
+  MANUAL_LONGITUDE: '-181'
+}), null);
+
+console.log('Location settings tests passed');
