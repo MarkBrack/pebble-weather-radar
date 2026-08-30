@@ -114,7 +114,8 @@ function buildMapTilePlan(values) {
     attribution: 'OpenStreetMap',
     prestyled: true,
     url: function(z, x, y) {
-      return values.tileServerUrl + '/tiles/v1/' + z + '/' + x + '/' + y + '.png';
+      var styleVersion = values.cropMode === 'wide' ? 'v1-wide' : 'v1';
+      return values.tileServerUrl + '/tiles/' + styleVersion + '/' + z + '/' + x + '/' + y + '.png';
     }
   } : getTileStyle(values.mapStyle);
   var center = latLonToWorldPixels(values.lat, values.lon, hiZoom);

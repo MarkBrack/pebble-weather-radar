@@ -56,7 +56,7 @@ function polygonElements(tile, layerName, filter = () => true) {
     .join('');
 }
 
-function roadElements(tile, zoom) {
+function roadElements(tile, zoom, displayScale) {
   const roads = layerFeatures(tile, 'streets')
     .filter((feature) => feature.type === 2)
     .map((feature) => ({ feature, rank: roadRank(feature.properties.kind, zoom) }))
@@ -67,14 +67,14 @@ function roadElements(tile, zoom) {
   const fills = [];
   for (const road of roads) {
     const path = linePath(road.feature);
-    const widths = roadWidths(road.rank, zoom);
+    const widths = roadWidths(road.rank, zoom, displayScale);
     casings.push(`<path d="${path}" stroke-width="${widths.casing.toFixed(2)}"/>`);
     fills.push(`<path d="${path}" stroke-width="${widths.fill.toFixed(2)}"/>`);
   }
   return { casings: casings.join(''), fills: fills.join('') };
 }
 
-function placeElements(tile, zoom) {
+function placeElements(tile, zoom, displayScale) {
   const places = layerFeatures(tile, 'place_labels')
     .filter((feature) => feature.type === 1 && includePlace(feature.properties, zoom))
     .map((feature) => ({ feature, point: firstPoint(feature) }))
@@ -84,20 +84,25 @@ function placeElements(tile, zoom) {
 
   return places.map(({ feature, point }) => {
     const label = escapeXml(feature.properties.name);
-    const size = feature.properties.kind === 'capital' || feature.properties.kind === 'state_capital' ? 12 : 10;
+    const baseSize = feature.properties.kind === 'capital' || feature.properties.kind === 'state_capital' ? 12 : 10;
+    const size = baseSize * displayScale;
+    const markerRadius = 2.2 * displayScale;
+    const labelOffset = 4 * displayScale;
+    const baselineOffset = 3 * displayScale;
     const x = point.x.toFixed(2);
     const y = point.y.toFixed(2);
-    return `<circle cx="${x}" cy="${y}" r="2.2"/>` +
-      `<text x="${(point.x + 4).toFixed(2)}" y="${(point.y + 3).toFixed(2)}" font-size="${size}">${label}</text>`;
+    return `<circle cx="${x}" cy="${y}" r="${markerRadius.toFixed(1)}"/>` +
+      `<text x="${(point.x + labelOffset).toFixed(2)}" y="${(point.y + baselineOffset).toFixed(2)}" font-size="${size}">${label}</text>`;
   }).join('');
 }
 
-export function vectorTileToSvg(buffer, zoom) {
+export function vectorTileToSvg(buffer, zoom, variant = 'standard') {
+  const displayScale = variant === 'wide' ? 2 : 1;
   const tile = new VectorTile(new Pbf(buffer));
   const ocean = polygonElements(tile, 'ocean');
   const water = polygonElements(tile, 'water_polygons', (properties) => properties.kind !== 'glacier');
-  const roads = roadElements(tile, zoom);
-  const places = placeElements(tile, zoom);
+  const roads = roadElements(tile, zoom, displayScale);
+  const places = placeElements(tile, zoom, displayScale);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${TILE_SIZE}" height="${TILE_SIZE}" viewBox="0 0 ${TILE_SIZE} ${TILE_SIZE}">` +
     `<rect width="256" height="256" fill="${rgb(PALETTE.land)}"/>` +
@@ -105,7 +110,7 @@ export function vectorTileToSvg(buffer, zoom) {
     `<g fill="none" stroke="${rgb(PALETTE.roadCasing)}" stroke-linecap="round" stroke-linejoin="round">${roads.casings}</g>` +
     `<g fill="none" stroke="${rgb(PALETTE.road)}" stroke-linecap="round" stroke-linejoin="round">${roads.fills}</g>` +
     `<g fill="${rgb(PALETTE.city)}" font-family="DejaVu Sans,sans-serif" font-weight="bold" ` +
-      `stroke="${rgb(PALETTE.land)}" stroke-width="2" paint-order="stroke">${places}</g>` +
+      `stroke="${rgb(PALETTE.land)}" stroke-width="${2 * displayScale}" paint-order="stroke">${places}</g>` +
     '</svg>';
 }
 
@@ -143,6 +148,6 @@ export async function quantizeToPebblePalette(input) {
   }).png({ palette: true, colours: OUTPUT_PALETTE.length, compressionLevel: 9 }).toBuffer();
 }
 
-export async function renderVectorTile(buffer, zoom) {
-  return quantizeToPebblePalette(Buffer.from(vectorTileToSvg(buffer, zoom)));
+export async function renderVectorTile(buffer, zoom, variant = 'standard') {
+  return quantizeToPebblePalette(Buffer.from(vectorTileToSvg(buffer, zoom, variant)));
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { escapeXml, includePlace, roadRank } from '../src/style.js';
+import { escapeXml, includePlace, roadRank, roadWidths } from '../src/style.js';
 import { parseTileCoordinates } from '../src/tile-service.js';
 
 test('road visibility increases with zoom', () => {
@@ -11,6 +11,13 @@ test('road visibility increases with zoom', () => {
   assert.equal(roadRank('secondary', 8), 0);
   assert.equal(roadRank('secondary', 9), 1);
   assert.equal(roadRank('residential', 14), 0);
+});
+
+test('wide tiles compensate for the phone two-times downsample', () => {
+  const standard = roadWidths(4, 8, 1);
+  const wide = roadWidths(4, 8, 2);
+  assert.equal(wide.casing, standard.casing * 2);
+  assert.equal(wide.fill, standard.fill * 2);
 });
 
 test('only significant populated places are labelled', () => {

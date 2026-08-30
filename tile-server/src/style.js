@@ -23,11 +23,11 @@ export function roadRank(kind, zoom) {
   return 0;
 }
 
-export function roadWidths(rank, zoom) {
+export function roadWidths(rank, zoom, displayScale = 1) {
   const zoomBoost = Math.max(0, zoom - 8) * 0.18;
   return {
-    casing: Math.min(5, 1.4 + (rank * 0.55) + zoomBoost),
-    fill: Math.min(3.4, 0.7 + (rank * 0.38) + zoomBoost)
+    casing: Math.min(5, 1.4 + (rank * 0.55) + zoomBoost) * displayScale,
+    fill: Math.min(3.4, 0.7 + (rank * 0.38) + zoomBoost) * displayScale
   };
 }
 

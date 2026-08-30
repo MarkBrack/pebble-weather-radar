@@ -29,8 +29,9 @@ export class TileService {
     this.inFlight = new Map();
   }
 
-  cachePath({ z, x, y }) {
-    return path.join(this.cacheDir, STYLE_VERSION, String(z), String(x), `${y}.png`);
+  cachePath({ z, x, y }, variant = 'standard') {
+    const styleKey = variant === 'wide' ? `${STYLE_VERSION}-wide` : STYLE_VERSION;
+    return path.join(this.cacheDir, styleKey, String(z), String(x), `${y}.png`);
   }
 
   upstreamUrl({ z, x, y }) {
@@ -51,7 +52,7 @@ export class TileService {
     }
   }
 
-  async createTile(coords, filePath) {
+  async createTile(coords, variant, filePath) {
     const response = await this.fetch(this.upstreamUrl(coords), {
       headers: {
         Accept: 'application/vnd.mapbox-vector-tile, application/x-protobuf',
@@ -62,7 +63,7 @@ export class TileService {
     if (!response.ok) throw new Error(`Vector upstream returned HTTP ${response.status}`);
 
     const vectorTile = Buffer.from(await response.arrayBuffer());
-    const png = await this.render(vectorTile, coords.z);
+    const png = await this.render(vectorTile, coords.z, variant);
     await mkdir(path.dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
     await writeFile(temporaryPath, png);
@@ -70,13 +71,13 @@ export class TileService {
     return png;
   }
 
-  async getTile(coords) {
-    const filePath = this.cachePath(coords);
+  async getTile(coords, variant = 'standard') {
+    const filePath = this.cachePath(coords, variant);
     const cached = await this.readFreshCache(filePath);
     if (cached) return { png: cached, cache: 'HIT' };
 
     if (!this.inFlight.has(filePath)) {
-      this.inFlight.set(filePath, this.createTile(coords, filePath)
+      this.inFlight.set(filePath, this.createTile(coords, variant, filePath)
         .finally(() => this.inFlight.delete(filePath)));
     }
     return { png: await this.inFlight.get(filePath), cache: 'MISS' };
