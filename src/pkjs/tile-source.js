@@ -1,4 +1,4 @@
-var CLAY_SETTINGS_KEY = 'clay-settings';
+var PRODUCTION_SERVER_URL = 'https://ada.tailadb379.ts.net:8443/weather-radar';
 
 function normalizeServerUrl(value) {
   if (typeof value !== 'string') {
@@ -12,40 +12,12 @@ function normalizeServerUrl(value) {
   return normalized;
 }
 
-function serverUrlFromSettings(settings) {
-  return normalizeServerUrl(settings && settings.TILE_SERVER_URL);
-}
-
-function getServerUrl(storage) {
-  try {
-    var settings = JSON.parse(storage.getItem(CLAY_SETTINGS_KEY)) || {};
-    return serverUrlFromSettings(settings);
-  } catch (error) {
-    console.log('Could not read tile server setting: ' + error.message);
-    return null;
-  }
-}
-
-function normalizeServerToken(value) {
-  if (typeof value !== 'string') return null;
-  var normalized = value.trim();
-  return normalized || null;
-}
-
-function getServerToken(storage) {
-  try {
-    var settings = JSON.parse(storage.getItem(CLAY_SETTINGS_KEY)) || {};
-    return normalizeServerToken(settings.TILE_SERVER_TOKEN);
-  } catch (error) {
-    console.log('Could not read tile server token: ' + error.message);
-    return null;
-  }
+function getServerUrl() {
+  return PRODUCTION_SERVER_URL;
 }
 
 module.exports = {
+  PRODUCTION_SERVER_URL: PRODUCTION_SERVER_URL,
   normalizeServerUrl: normalizeServerUrl,
-  normalizeServerToken: normalizeServerToken,
-  serverUrlFromSettings: serverUrlFromSettings,
-  getServerUrl: getServerUrl,
-  getServerToken: getServerToken
+  getServerUrl: getServerUrl
 };

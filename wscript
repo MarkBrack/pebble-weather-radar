@@ -1,3 +1,5 @@
+import json
+import os
 import os.path
 
 top = '.'
@@ -12,8 +14,26 @@ def configure(ctx):
     ctx.load('pebble_sdk')
 
 
+def write_deployment_config():
+    token = os.environ.get('TILE_SERVER_TOKEN')
+    env_path = os.path.join(top, 'tile-server', '.env')
+    if not token and os.path.exists(env_path):
+        with open(env_path, 'r') as env_file:
+            for line in env_file:
+                key, separator, value = line.strip().partition('=')
+                if separator and key == 'TILE_SERVER_TOKEN':
+                    token = value
+                    break
+
+    output_path = os.path.join(top, 'src', 'pkjs', 'deployment.generated.js')
+    with open(output_path, 'w') as output:
+        output.write('module.exports = { tileServerToken: %s };\n' % json.dumps(token or None))
+    os.chmod(output_path, 0o600)
+
+
 def build(ctx):
     ctx.load('pebble_sdk')
+    write_deployment_config()
 
     build_worker = os.path.exists('worker_src')
     binaries = []

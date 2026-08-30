@@ -2,6 +2,7 @@ var renderer = require('./render');
 var rle = require('./rle');
 var locationSettings = require('./location');
 var tileSourceSettings = require('./tile-source');
+var deployment = require('./deployment.generated');
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config');
 var configPage = require('./config-page');
@@ -323,9 +324,9 @@ function refreshFrame(request) {
 
   queueStatus('Locating...').then(getLocation).then(function(coords) {
     console.log('Using coordinates ' + coords.latitude + ',' + coords.longitude);
-    var tileServerUrl = tileSourceSettings.getServerUrl(localStorage);
-    var tileServerToken = tileSourceSettings.getServerToken(localStorage);
-    console.log(tileServerUrl ? 'Using test tile server ' + tileServerUrl : 'Using standard OSM tiles');
+    var tileServerUrl = tileSourceSettings.getServerUrl();
+    var tileServerToken = deployment.tileServerToken;
+    console.log('Using production tile server ' + tileServerUrl);
     return queueStatus('Fetching radar...').then(fetchRadarTimestamps).then(function(radarTimestamps) {
       var options = {
         lat: coords.latitude,
