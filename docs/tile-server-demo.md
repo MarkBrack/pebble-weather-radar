@@ -56,8 +56,8 @@ white water or black labels back into green land.
 ## Endpoint
 
 ```text
-GET /tiles/v1/{z}/{x}/{y}.png
-GET /tiles/v1-wide/{z}/{x}/{y}.png
+GET /tiles/v2/{z}/{x}/{y}.png
+GET /tiles/v2-wide/{z}/{x}/{y}.png
 ```
 
 The Wide endpoint doubles road, marker, label, and label-halo dimensions to

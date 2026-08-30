@@ -70,7 +70,7 @@ var wideServerValues = renderer.getRenderValues({
   lat: 54.623, lon: -1.302, mapZoom: 8, cropMode: 'wide',
   tileServerUrl: 'http://tiles.test'
 });
-assert.ok(renderer.buildMapTilePlan(standardServerValues).tiles[0].url.indexOf('/tiles/v1/') !== -1);
-assert.ok(renderer.buildMapTilePlan(wideServerValues).tiles[0].url.indexOf('/tiles/v1-wide/') !== -1);
+assert.ok(renderer.buildMapTilePlan(standardServerValues).tiles[0].url.indexOf('/tiles/v2/') !== -1);
+assert.ok(renderer.buildMapTilePlan(wideServerValues).tiles[0].url.indexOf('/tiles/v2-wide/') !== -1);
 
 console.log('Map rendering tests passed');

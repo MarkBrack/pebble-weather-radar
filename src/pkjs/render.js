@@ -114,7 +114,7 @@ function buildMapTilePlan(values) {
     attribution: 'OpenStreetMap',
     prestyled: true,
     url: function(z, x, y) {
-      var styleVersion = values.cropMode === 'wide' ? 'v1-wide' : 'v1';
+      var styleVersion = values.cropMode === 'wide' ? 'v2-wide' : 'v2';
       return values.tileServerUrl + '/tiles/' + styleVersion + '/' + z + '/' + x + '/' + y + '.png';
     }
   } : getTileStyle(values.mapStyle);

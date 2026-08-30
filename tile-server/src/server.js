@@ -26,17 +26,17 @@ const server = createServer(async (request, response) => {
   }
   if (url.pathname === '/healthz') return sendJson(response, 200, { status: 'ok' });
 
-  const match = url.pathname.match(/^\/tiles\/(v1|v1-wide)\/(\d+)\/(\d+)\/(\d+)\.png$/);
+  const match = url.pathname.match(/^\/tiles\/(v1|v1-wide|v2|v2-wide)\/(\d+)\/(\d+)\/(\d+)\.png$/);
   if (!match) {
     return sendJson(response, 404, {
       error: 'Not found',
-      tileTemplate: '/tiles/v1/{z}/{x}/{y}.png',
-      wideTileTemplate: '/tiles/v1-wide/{z}/{x}/{y}.png',
+      tileTemplate: '/tiles/v2/{z}/{x}/{y}.png',
+      wideTileTemplate: '/tiles/v2-wide/{z}/{x}/{y}.png',
       attribution: '© OpenStreetMap contributors'
     });
   }
 
-  const variant = match[1] === 'v1-wide' ? 'wide' : 'standard';
+  const variant = /-wide$/.test(match[1]) ? 'wide' : 'standard';
   const coords = parseTileCoordinates(match[2], match[3], match[4]);
   if (!coords) return sendJson(response, 400, { error: 'Invalid slippy tile coordinates' });
 
