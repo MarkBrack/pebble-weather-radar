@@ -27,7 +27,7 @@ var HARDCODED_LOCATION = {
 var refreshInFlight = false;
 var queuedRequest = null;
 
-function xhr(url, responseType, timeoutMs) {
+function xhr(url, responseType, timeoutMs, headers) {
   return new Promise(function(resolve, reject) {
     var request = new XMLHttpRequest();
     request.open('GET', url, true);
@@ -40,6 +40,11 @@ function xhr(url, responseType, timeoutMs) {
     Object.keys(DEFAULT_HEADERS).forEach(function(header) {
       try {
         request.setRequestHeader(header, DEFAULT_HEADERS[header]);
+      } catch (error) {}
+    });
+    Object.keys(headers || {}).forEach(function(header) {
+      try {
+        request.setRequestHeader(header, headers[header]);
       } catch (error) {}
     });
     request.onload = function() {
@@ -66,8 +71,8 @@ function fetchJson(url) {
 }
 
 var transport = {
-  fetchArrayBuffer: function(url, timeoutMs) {
-    return xhr(url, 'arraybuffer', timeoutMs);
+  fetchArrayBuffer: function(url, timeoutMs, headers) {
+    return xhr(url, 'arraybuffer', timeoutMs, headers);
   }
 };
 
@@ -319,6 +324,7 @@ function refreshFrame(request) {
   queueStatus('Locating...').then(getLocation).then(function(coords) {
     console.log('Using coordinates ' + coords.latitude + ',' + coords.longitude);
     var tileServerUrl = tileSourceSettings.getServerUrl(localStorage);
+    var tileServerToken = tileSourceSettings.getServerToken(localStorage);
     console.log(tileServerUrl ? 'Using test tile server ' + tileServerUrl : 'Using standard OSM tiles');
     return queueStatus('Fetching radar...').then(fetchRadarTimestamps).then(function(radarTimestamps) {
       var options = {
@@ -328,6 +334,7 @@ function refreshFrame(request) {
         cropMode: normalized.cropMode,
         mapStyle: tileServerUrl ? 'pebble_server' : 'osm_standard',
         tileServerUrl: tileServerUrl,
+        tileServerToken: tileServerToken,
         mapDetailMode: 'native',
         baseSize: renderer.BASE_SIZE,
         radarZoomCap: renderer.RADAR_MAX_ZOOM,

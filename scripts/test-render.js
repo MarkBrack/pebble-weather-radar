@@ -91,10 +91,12 @@ function testTileServerTimeoutFallback() {
     encodedTile.byteOffset + encodedTile.byteLength
   );
   var requestedUrls = [];
+  var viewportHeaders;
   var transport = {
-    fetchArrayBuffer: function(url) {
+    fetchArrayBuffer: function(url, timeoutMs, headers) {
       requestedUrls.push(url);
       if (url.indexOf('/maps/v1/') !== -1) {
+        viewportHeaders = headers;
         return new Promise(function() {});
       }
       return Promise.resolve(tilePng);
@@ -107,12 +109,14 @@ function testTileServerTimeoutFallback() {
     mapZoom: 8,
     cropMode: 'standard',
     tileServerUrl: 'http://tiles.test',
+    tileServerToken: 'test-secret',
     viewportTimeoutMs: 5
   }).then(function(result) {
     assert.strictEqual(result.usedFallback, true);
     assert.ok(result.fallbackReason.indexOf('timed out') !== -1);
     assert.strictEqual(result.values.tileServerUrl, null);
     assert.ok(requestedUrls[0].indexOf('/maps/v1/standard/') !== -1);
+    assert.strictEqual(viewportHeaders['X-Tile-Token'], 'test-secret');
     assert.ok(requestedUrls.slice(1).every(function(url) {
       return url.indexOf('https://tile.openstreetmap.org/') === 0;
     }));

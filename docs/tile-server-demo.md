@@ -22,6 +22,11 @@ curl -o lake-como.png http://localhost:8080/tiles/v1/8/134/90.png
 The first request fetches and renders the upstream vector tile. Later requests
 come from the persistent Docker volume. `X-Tile-Cache` reports `MISS` or `HIT`.
 
+For the small Ada deployment, `compose.yaml` binds the container only to
+`127.0.0.1:8081`; Tailscale Funnel terminates public HTTPS and proxies a
+dedicated path to it. Run `deploy.sh` to create a private `.env` token on first
+use and start or update the container. The token is retained across redeploys.
+
 To run without Docker:
 
 ```bash
@@ -86,6 +91,7 @@ Configuration:
 | `OSM_VECTOR_TILE_URL` | official Shortbread v1 template | Configurable MVT source |
 | `OSM_USER_AGENT` | project name and contact email | Honest upstream identification |
 | `UPSTREAM_CACHE_SECONDS` | `604800` | Cache lifetime, with a seven-day minimum |
+| `TILE_SERVER_TOKEN` | unset | Optional fixed token required in the `X-Tile-Token` request header |
 
 ## Rendering and cache flow
 

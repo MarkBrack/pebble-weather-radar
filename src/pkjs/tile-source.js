@@ -26,8 +26,26 @@ function getServerUrl(storage) {
   }
 }
 
+function normalizeServerToken(value) {
+  if (typeof value !== 'string') return null;
+  var normalized = value.trim();
+  return normalized || null;
+}
+
+function getServerToken(storage) {
+  try {
+    var settings = JSON.parse(storage.getItem(CLAY_SETTINGS_KEY)) || {};
+    return normalizeServerToken(settings.TILE_SERVER_TOKEN);
+  } catch (error) {
+    console.log('Could not read tile server token: ' + error.message);
+    return null;
+  }
+}
+
 module.exports = {
   normalizeServerUrl: normalizeServerUrl,
+  normalizeServerToken: normalizeServerToken,
   serverUrlFromSettings: serverUrlFromSettings,
-  getServerUrl: getServerUrl
+  getServerUrl: getServerUrl,
+  getServerToken: getServerToken
 };

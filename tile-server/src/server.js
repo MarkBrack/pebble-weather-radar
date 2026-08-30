@@ -1,8 +1,10 @@
 import { createServer } from 'node:http';
+import { tokenMatches } from './auth.js';
 import { TileService, etagFor, parseTileCoordinates } from './tile-service.js';
 import { ViewportService } from './viewport.js';
 
 const port = Number(process.env.PORT) || 8080;
+const tileServerToken = process.env.TILE_SERVER_TOKEN || null;
 const service = new TileService({ cacheDir: process.env.CACHE_DIR });
 const viewportService = new ViewportService(service);
 
@@ -22,11 +24,15 @@ const server = createServer(async (request, response) => {
     response.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'If-None-Match'
+      'Access-Control-Allow-Headers': 'If-None-Match, X-Tile-Token'
     });
     return response.end();
   }
   if (url.pathname === '/healthz') return sendJson(response, 200, { status: 'ok' });
+
+  if (!tokenMatches(tileServerToken, request.headers['x-tile-token'])) {
+    return sendJson(response, 401, { error: 'Invalid or missing tile token' });
+  }
 
   const viewportMatch = url.pathname.match(
     /^\/maps\/v1\/(standard|wide)\/(\d+)\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)\.png$/

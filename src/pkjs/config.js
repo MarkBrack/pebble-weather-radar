@@ -64,6 +64,18 @@ module.exports = [
           type: 'url',
           placeholder: 'http://192.168.1.10:8080'
         }
+      },
+      {
+        type: 'input',
+        messageKey: 'TILE_SERVER_TOKEN',
+        label: 'Access token',
+        description: 'Optional token required by a protected tile server.',
+        defaultValue: '',
+        attributes: {
+          type: 'password',
+          autocomplete: 'off',
+          placeholder: 'Server access token'
+        }
       }
     ]
   },

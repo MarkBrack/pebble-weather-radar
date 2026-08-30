@@ -1,0 +1,14 @@
+services:
+  tile-server:
+    build: .
+    container_name: pebble-weather-radar-tile-server
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - tile-cache:/data/cache
+
+volumes:
+  tile-cache:

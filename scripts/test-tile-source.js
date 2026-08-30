@@ -13,9 +13,14 @@ assert.strictEqual(tileSource.normalizeServerUrl('javascript:alert(1)'), null);
 
 var storage = {
   getItem: function() {
-    return JSON.stringify({ TILE_SERVER_URL: 'http://10.0.0.2:8080/' });
+    return JSON.stringify({
+      TILE_SERVER_URL: 'http://10.0.0.2:8080/',
+      TILE_SERVER_TOKEN: ' fixed-secret '
+    });
   }
 };
 assert.strictEqual(tileSource.getServerUrl(storage), 'http://10.0.0.2:8080');
+assert.strictEqual(tileSource.getServerToken(storage), 'fixed-secret');
+assert.strictEqual(tileSource.normalizeServerToken('  '), null);
 
 console.log('Tile source settings tests passed');

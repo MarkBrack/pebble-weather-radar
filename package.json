@@ -44,7 +44,8 @@
       "MANUAL_LOCATION",
       "MANUAL_LATITUDE",
       "MANUAL_LONGITUDE",
-      "TILE_SERVER_URL"
+      "TILE_SERVER_URL",
+      "TILE_SERVER_TOKEN"
     ],
     "resources": {
       "media": []

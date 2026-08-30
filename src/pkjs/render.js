@@ -98,6 +98,7 @@ function getRenderValues(options) {
     cropHeight: DISPLAY_HEIGHT * cropScale,
     mapStyle: options.mapStyle || 'osm_standard',
     tileServerUrl: options.tileServerUrl || null,
+    tileServerToken: options.tileServerToken || null,
     mapDetailMode: mapDetailMode,
     detailScale: detailScale,
     baseSize: options.baseSize || BASE_SIZE,
@@ -832,7 +833,8 @@ function renderBackgroundOnly(transport, options) {
 
   var viewportUrl = buildViewportUrl(values);
   var viewportRequest = fetchPngRgba(function(url) {
-    return transport.fetchArrayBuffer(url, values.viewportTimeoutMs);
+    var headers = values.tileServerToken ? { 'X-Tile-Token': values.tileServerToken } : {};
+    return transport.fetchArrayBuffer(url, values.viewportTimeoutMs, headers);
   }, viewportUrl).then(function(image) {
     if (image.width !== DISPLAY_WIDTH || image.height !== DISPLAY_HEIGHT) {
       throw new Error('Unexpected viewport size ' + image.width + 'x' + image.height);
