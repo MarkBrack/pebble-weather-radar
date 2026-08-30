@@ -92,6 +92,16 @@ Configuration:
 | `OSM_USER_AGENT` | project name and contact email | Honest upstream identification |
 | `UPSTREAM_CACHE_SECONDS` | `604800` | Cache lifetime, with a seven-day minimum |
 | `TILE_SERVER_TOKEN` | unset | Optional fixed token required in the `X-Tile-Token` request header |
+| `METRICS_TOKEN` | unset | Enables `/internal/metrics`, requiring the `X-Metrics-Token` header |
+
+## Internal request metrics
+
+`GET /internal/metrics` returns persistent totals and UTC daily counts for
+watch viewport requests, diagnostic slippy-tile requests, cache hits and misses,
+render errors, and unauthorised requests. The daily history retains 90 days.
+The endpoint is disabled unless `METRICS_TOKEN` is set and never accepts the app
+tile token. On Ada, query it over SSH against `http://127.0.0.1:8081` so the
+monitoring credential does not need to cross the public Funnel.
 
 ## Rendering and cache flow
 

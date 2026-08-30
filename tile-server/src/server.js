@@ -1,12 +1,15 @@
 import { createServer } from 'node:http';
 import { tokenMatches } from './auth.js';
+import { RequestMetrics } from './metrics.js';
 import { TileService, etagFor, parseTileCoordinates } from './tile-service.js';
 import { ViewportService } from './viewport.js';
 
 const port = Number(process.env.PORT) || 8080;
 const tileServerToken = process.env.TILE_SERVER_TOKEN || null;
+const metricsToken = process.env.METRICS_TOKEN || null;
 const service = new TileService({ cacheDir: process.env.CACHE_DIR });
 const viewportService = new ViewportService(service);
+const metrics = new RequestMetrics({ filePath: `${service.cacheDir}/request-metrics.json` });
 
 function sendJson(response, status, payload) {
   const body = Buffer.from(JSON.stringify(payload));
@@ -30,7 +33,16 @@ const server = createServer(async (request, response) => {
   }
   if (url.pathname === '/healthz') return sendJson(response, 200, { status: 'ok' });
 
+  if (url.pathname === '/internal/metrics') {
+    if (!metricsToken) return sendJson(response, 404, { error: 'Metrics endpoint is disabled' });
+    if (!tokenMatches(metricsToken, request.headers['x-metrics-token'])) {
+      return sendJson(response, 401, { error: 'Invalid or missing metrics token' });
+    }
+    return sendJson(response, 200, await metrics.snapshot());
+  }
+
   if (!tokenMatches(tileServerToken, request.headers['x-tile-token'])) {
+    metrics.record('unauthorizedRequests').catch(console.error);
     return sendJson(response, 401, { error: 'Invalid or missing tile token' });
   }
 
@@ -50,6 +62,8 @@ const server = createServer(async (request, response) => {
 
     try {
       const result = await viewportService.getViewport(latitude, longitude, zoom, mode);
+      metrics.record('viewportRequests').catch(console.error);
+      metrics.record(result.cache === 'HIT' ? 'cacheHits' : 'cacheMisses').catch(console.error);
       const etag = etagFor(result.png);
       if (request.headers['if-none-match'] === etag) {
         response.writeHead(304, {
@@ -70,6 +84,8 @@ const server = createServer(async (request, response) => {
       });
       return response.end(result.png);
     } catch (error) {
+      metrics.record('viewportRequests').catch(console.error);
+      metrics.record('renderErrors').catch(console.error);
       console.error(error);
       return sendJson(response, 502, { error: 'Unable to render map viewport' });
     }
@@ -92,6 +108,8 @@ const server = createServer(async (request, response) => {
 
   try {
     const result = await service.getTile(coords, variant);
+    metrics.record('slippyTileRequests').catch(console.error);
+    metrics.record(result.cache === 'HIT' ? 'cacheHits' : 'cacheMisses').catch(console.error);
     const etag = etagFor(result.png);
     if (request.headers['if-none-match'] === etag) {
       response.writeHead(304, {
@@ -112,6 +130,8 @@ const server = createServer(async (request, response) => {
     });
     response.end(result.png);
   } catch (error) {
+    metrics.record('slippyTileRequests').catch(console.error);
+    metrics.record('renderErrors').catch(console.error);
     console.error(error);
     sendJson(response, 502, { error: 'Unable to render upstream vector tile' });
   }

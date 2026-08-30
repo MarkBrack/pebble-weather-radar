@@ -9,6 +9,11 @@ if [ ! -s .env ]; then
   openssl rand -hex 32 >> .env
 fi
 
+if ! grep --quiet '^METRICS_TOKEN=' .env; then
+  printf 'METRICS_TOKEN=' >> .env
+  openssl rand -hex 32 >> .env
+fi
+
 sudo docker compose up --detach --build
 
 attempt=0
