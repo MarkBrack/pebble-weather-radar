@@ -61,7 +61,7 @@ tiles for that refresh.
 ## Endpoints
 
 ```text
-GET /maps/v1/{standard|wide}/{z}/{latitude}/{longitude}.png
+GET /maps/v2/{standard|wide}/{z}/{latitude}/{longitude}.png
 GET /tiles/v2/{z}/{x}/{y}.png
 GET /tiles/v2-wide/{z}/{x}/{y}.png
 ```
@@ -99,7 +99,7 @@ Configuration:
 Pebble companion (one request)
       |
       v
-/maps/v1/mode/z/lat/lon.png
+/maps/v2/mode/z/lat/lon.png
       |
       +-- fresh viewport cache --------------------------> response
       |

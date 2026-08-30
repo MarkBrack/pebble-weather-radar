@@ -160,7 +160,7 @@ function buildMapTilePlan(values) {
 
 function buildViewportUrl(values) {
   var baseUrl = values.tileServerUrl.replace(/\/+$/, '');
-  return baseUrl + '/maps/v1/' + values.cropMode + '/' + values.mapZoom + '/' +
+  return baseUrl + '/maps/v2/' + values.cropMode + '/' + values.mapZoom + '/' +
     values.lat.toFixed(6) + '/' + values.lon.toFixed(6) + '.png';
 }
 

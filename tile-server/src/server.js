@@ -35,13 +35,13 @@ const server = createServer(async (request, response) => {
   }
 
   const viewportMatch = url.pathname.match(
-    /^\/maps\/v1\/(standard|wide)\/(\d+)\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)\.png$/
+    /^\/maps\/(v1|v2)\/(standard|wide)\/(\d+)\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)\.png$/
   );
   if (viewportMatch) {
-    const mode = viewportMatch[1];
-    const zoom = Number(viewportMatch[2]);
-    const latitude = Number(viewportMatch[3]);
-    const longitude = Number(viewportMatch[4]);
+    const mode = viewportMatch[2];
+    const zoom = Number(viewportMatch[3]);
+    const latitude = Number(viewportMatch[4]);
+    const longitude = Number(viewportMatch[5]);
     if (!Number.isInteger(zoom) || zoom < 0 || zoom > 14 ||
         !Number.isFinite(latitude) || latitude < -85.05112878 || latitude > 85.05112878 ||
         !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
@@ -79,7 +79,7 @@ const server = createServer(async (request, response) => {
   if (!match) {
     return sendJson(response, 404, {
       error: 'Not found',
-      viewportTemplate: '/maps/v1/{mode}/{z}/{latitude}/{longitude}.png',
+      viewportTemplate: '/maps/v2/{mode}/{z}/{latitude}/{longitude}.png',
       tileTemplate: '/tiles/v2/{z}/{x}/{y}.png',
       wideTileTemplate: '/tiles/v2-wide/{z}/{x}/{y}.png',
       attribution: '© OpenStreetMap contributors'

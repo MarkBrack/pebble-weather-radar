@@ -74,11 +74,11 @@ assert.ok(renderer.buildMapTilePlan(standardServerValues).tiles[0].url.indexOf('
 assert.ok(renderer.buildMapTilePlan(wideServerValues).tiles[0].url.indexOf('/tiles/v2-wide/') !== -1);
 assert.strictEqual(
   renderer.buildViewportUrl(standardServerValues),
-  'http://tiles.test/maps/v1/standard/8/54.623000/-1.302000.png'
+  'http://tiles.test/maps/v2/standard/8/54.623000/-1.302000.png'
 );
 assert.strictEqual(
   renderer.buildViewportUrl(Object.assign({}, wideServerValues, { tileServerUrl: 'http://tiles.test/' })),
-  'http://tiles.test/maps/v1/wide/8/54.623000/-1.302000.png'
+  'http://tiles.test/maps/v2/wide/8/54.623000/-1.302000.png'
 );
 
 function testTileServerTimeoutFallback() {
@@ -95,7 +95,7 @@ function testTileServerTimeoutFallback() {
   var transport = {
     fetchArrayBuffer: function(url, timeoutMs, headers) {
       requestedUrls.push(url);
-      if (url.indexOf('/maps/v1/') !== -1) {
+      if (url.indexOf('/maps/v2/') !== -1) {
         viewportHeaders = headers;
         return new Promise(function() {});
       }
@@ -115,7 +115,7 @@ function testTileServerTimeoutFallback() {
     assert.strictEqual(result.usedFallback, true);
     assert.ok(result.fallbackReason.indexOf('timed out') !== -1);
     assert.strictEqual(result.values.tileServerUrl, null);
-    assert.ok(requestedUrls[0].indexOf('/maps/v1/standard/') !== -1);
+    assert.ok(requestedUrls[0].indexOf('/maps/v2/standard/') !== -1);
     assert.strictEqual(viewportHeaders['X-Tile-Token'], 'test-secret');
     assert.ok(requestedUrls.slice(1).every(function(url) {
       return url.indexOf('https://tile.openstreetmap.org/') === 0;
