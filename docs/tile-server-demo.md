@@ -23,9 +23,11 @@ The first request fetches and renders the upstream vector tile. Later requests
 come from the persistent Docker volume. `X-Tile-Cache` reports `MISS` or `HIT`.
 
 For the small Ada deployment, `compose.yaml` binds the container only to
-`127.0.0.1:8081`; Tailscale Funnel terminates public HTTPS and proxies a
-dedicated path to it. Run `deploy.sh` to create a private `.env` token on first
-use and start or update the container. The token is retained across redeploys.
+`127.0.0.1:8081`. Tailscale Funnel exposes only
+`https://ada.tailadb379.ts.net:8443/weather-radar`; the existing Ada site stays
+Tailnet-only on Tailscale Serve port 443. Run `deploy.sh` to create a private
+`.env` token on first use and start or update the container. The token is
+retained across redeploys.
 
 To run without Docker:
 
