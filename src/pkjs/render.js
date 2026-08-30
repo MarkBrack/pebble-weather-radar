@@ -155,6 +155,12 @@ function buildMapTilePlan(values) {
   };
 }
 
+function buildViewportUrl(values) {
+  var baseUrl = values.tileServerUrl.replace(/\/+$/, '');
+  return baseUrl + '/maps/v1/' + values.cropMode + '/' + values.mapZoom + '/' +
+    values.lat.toFixed(6) + '/' + values.lon.toFixed(6) + '.png';
+}
+
 function fetchPngRgba(fetchArrayBuffer, url) {
   return fetchArrayBuffer(url).then(function(buffer) {
     var decoded = UPNG.decode(buffer);
@@ -782,6 +788,22 @@ function cropPaletteForPebble(paletteBuffer, values) {
 
 function renderBackgroundOnly(transport, options) {
   var values = getRenderValues(options);
+
+  if (values.tileServerUrl) {
+    var viewportUrl = buildViewportUrl(values);
+    return fetchPngRgba(transport.fetchArrayBuffer, viewportUrl).then(function(image) {
+      if (image.width !== DISPLAY_WIDTH || image.height !== DISPLAY_HEIGHT) {
+        throw new Error('Unexpected viewport size ' + image.width + 'x' + image.height);
+      }
+      return {
+        pebble8Bit: quantizeToPebble8Bit(image.rgba),
+        values: values,
+        plan: null,
+        viewportUrl: viewportUrl
+      };
+    });
+  }
+
   var plan = buildMapTilePlan(values);
 
   return fetchTilesSerially(transport, plan.tiles).then(function(tileImages) {
@@ -824,6 +846,7 @@ module.exports = {
   RAIN_COLORS: RAIN_COLORS,
   getRenderValues: getRenderValues,
   buildMapTilePlan: buildMapTilePlan,
+  buildViewportUrl: buildViewportUrl,
   applyPebbleMapStyle: applyPebbleMapStyle,
   classifyPrestyledMap: classifyPrestyledMap,
   cropAndScaleMapForPebble: cropAndScaleMapForPebble,

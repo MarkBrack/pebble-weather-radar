@@ -1,7 +1,7 @@
 # Pebble vector tile server demo
 
 This demo turns OpenStreetMap Shortbread vector tiles into deliberately simple
-256×256 indexed PNG slippy tiles for the Pebble companion. It renders only five
+watch-sized indexed PNG maps for the Pebble companion. It renders only five
 exact Pebble palette colours:
 
 - green land
@@ -39,7 +39,7 @@ the normal Pebble configuration screen. To use it:
 
 1. Start the server with `npm start` from `tile-server/` and leave it running.
 2. Find the computer's LAN address and verify on the phone that a URL such as
-   `http://<computer-ip>:8080/tiles/v1/8/134/90.png` displays a map tile.
+   `http://<computer-ip>:8080/maps/v1/wide/8/54.623/-1.302.png` displays a map.
 3. Run `pebble build`, then install `build/pebble-weather-radar.pbw` on the test
    phone/watch in the usual way.
 4. Open Rain Radar's configuration and enter only the server base URL, for
@@ -53,18 +53,24 @@ normal public OSM raster tiles. The server enables cross-origin tile requests,
 and the phone renderer recognises its PNGs as pre-styled so it does not turn
 white water or black labels back into green land.
 
-## Endpoint
+## Endpoints
 
 ```text
+GET /maps/v1/{standard|wide}/{z}/{latitude}/{longitude}.png
 GET /tiles/v2/{z}/{x}/{y}.png
 GET /tiles/v2-wide/{z}/{x}/{y}.png
 ```
 
-The Wide endpoint doubles road, marker, label, and label-halo dimensions to
-compensate for the phone's 2× downsampling. This keeps names readable and major
-roads visible at the same apparent size as Standard view. Labels automatically flip
-towards the roomier side of a tile and clamp vertically to avoid edge clipping.
-The watch app selects the appropriate endpoint automatically.
+The app uses the viewport endpoint, which returns the final 200×228 map in one
+request. Standard renders the visible geographic area directly. Wide assembles a
+400×456 source and downsamples it to the watch size, preserving the existing
+wider-area behaviour.
+
+The server builds each viewport from cached, label-free 256×256 base tiles. It
+then considers labels from every intersecting vector tile together, places them
+inside the final watch boundary, avoids overlaps, and draws them only after the
+map has been cropped. Consequently, an internal slippy-tile edge can no longer
+clip a place name. The slippy endpoints remain available for diagnostics.
 
 Zoom is limited to the Shortbread service's native range of 0–14. Invalid
 coordinates return HTTP 400. Responses include an ETag, public cache headers,
@@ -84,21 +90,24 @@ Configuration:
 ## Rendering and cache flow
 
 ```text
-Pebble companion
+Pebble companion (one request)
       |
       v
-/tiles/v1/z/x/y.png
+/maps/v1/mode/z/lat/lon.png
       |
-      +-- fresh PNG cache --------------------> response
+      +-- fresh viewport cache --------------------------> response
       |
-      +-- miss -> Shortbread MVT -> SVG -> five-colour PNG
-                                      |
-                                      +-------> atomic cache write -> response
+      +-- miss -> cached label-free raster tiles -> crop/downsample
+               + cached Shortbread MVTs --------> global label layout
+                                                    |
+                                                    +--> five-colour PNG cache
 ```
 
-Concurrent misses for the same coordinate share one render operation. Cache
-keys include the style version so a palette or styling change can be deployed
-without mixing old and new tiles.
+The viewport centre is rounded to a source pixel before the final-cache lookup,
+so nearby GPS fixes can reuse a render while moving the map by less than half a
+source pixel. Raw MVTs, label-free raster tiles, and final viewports have separate
+cache layers. Concurrent misses for the same key share one operation, and style
+versions prevent old and new renders from mixing.
 
 ## Demo scope and production boundary
 
@@ -115,9 +124,9 @@ The upstream URL is therefore configurable.
 
 ## Watch integration
 
-The demo branch includes a `pebble_server` map style and exposes its base URL
-in the app's Clay configuration. It bypasses raster recolouring for these
-pre-styled tiles.
+The demo branch exposes the server base URL in the app's Clay configuration.
+When set, the companion requests one pre-styled watch-sized viewport rather
+than downloading, recolouring, stitching, and cropping slippy tiles itself.
 Leave the setting blank to retain the standard raster source. Keep that source
 as the default until Lake Como, a coast, London, and a rural fixture have been
 checked on the physical watch.

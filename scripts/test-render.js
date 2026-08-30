@@ -72,5 +72,13 @@ var wideServerValues = renderer.getRenderValues({
 });
 assert.ok(renderer.buildMapTilePlan(standardServerValues).tiles[0].url.indexOf('/tiles/v2/') !== -1);
 assert.ok(renderer.buildMapTilePlan(wideServerValues).tiles[0].url.indexOf('/tiles/v2-wide/') !== -1);
+assert.strictEqual(
+  renderer.buildViewportUrl(standardServerValues),
+  'http://tiles.test/maps/v1/standard/8/54.623000/-1.302000.png'
+);
+assert.strictEqual(
+  renderer.buildViewportUrl(Object.assign({}, wideServerValues, { tileServerUrl: 'http://tiles.test/' })),
+  'http://tiles.test/maps/v1/wide/8/54.623000/-1.302000.png'
+);
 
 console.log('Map rendering tests passed');

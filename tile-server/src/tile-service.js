@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { renderVectorTile } from './render.js';
 
-const STYLE_VERSION = 'v2';
+const STYLE_VERSION = 'v3';
 const DEFAULT_UPSTREAM = 'https://vector.openstreetmap.org/shortbread_v1/{z}/{x}/{y}.mvt';
 const MIN_CACHE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -30,8 +30,12 @@ export class TileService {
   }
 
   cachePath({ z, x, y }, variant = 'standard') {
-    const styleKey = variant === 'wide' ? `${STYLE_VERSION}-wide` : STYLE_VERSION;
+    const styleKey = variant === 'standard' ? STYLE_VERSION : `${STYLE_VERSION}-${variant}`;
     return path.join(this.cacheDir, styleKey, String(z), String(x), `${y}.png`);
+  }
+
+  vectorCachePath({ z, x, y }) {
+    return path.join(this.cacheDir, 'mvt', 'shortbread_v1', String(z), String(x), `${y}.mvt`);
   }
 
   upstreamUrl({ z, x, y }) {
@@ -52,7 +56,7 @@ export class TileService {
     }
   }
 
-  async createTile(coords, variant, filePath) {
+  async downloadVectorTile(coords, filePath) {
     const response = await this.fetch(this.upstreamUrl(coords), {
       headers: {
         Accept: 'application/vnd.mapbox-vector-tile, application/x-protobuf',
@@ -63,6 +67,27 @@ export class TileService {
     if (!response.ok) throw new Error(`Vector upstream returned HTTP ${response.status}`);
 
     const vectorTile = Buffer.from(await response.arrayBuffer());
+    await mkdir(path.dirname(filePath), { recursive: true });
+    const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(temporaryPath, vectorTile);
+    await rename(temporaryPath, filePath);
+    return vectorTile;
+  }
+
+  async getVectorTile(coords) {
+    const filePath = this.vectorCachePath(coords);
+    const cached = await this.readFreshCache(filePath);
+    if (cached) return cached;
+
+    if (!this.inFlight.has(filePath)) {
+      this.inFlight.set(filePath, this.downloadVectorTile(coords, filePath)
+        .finally(() => this.inFlight.delete(filePath)));
+    }
+    return this.inFlight.get(filePath);
+  }
+
+  async createTile(coords, variant, filePath) {
+    const vectorTile = await this.getVectorTile(coords);
     const png = await this.render(vectorTile, coords.z, variant);
     await mkdir(path.dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;

@@ -1,8 +1,10 @@
 import { createServer } from 'node:http';
 import { TileService, etagFor, parseTileCoordinates } from './tile-service.js';
+import { ViewportService } from './viewport.js';
 
 const port = Number(process.env.PORT) || 8080;
 const service = new TileService({ cacheDir: process.env.CACHE_DIR });
+const viewportService = new ViewportService(service);
 
 function sendJson(response, status, payload) {
   const body = Buffer.from(JSON.stringify(payload));
@@ -26,10 +28,52 @@ const server = createServer(async (request, response) => {
   }
   if (url.pathname === '/healthz') return sendJson(response, 200, { status: 'ok' });
 
+  const viewportMatch = url.pathname.match(
+    /^\/maps\/v1\/(standard|wide)\/(\d+)\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)\.png$/
+  );
+  if (viewportMatch) {
+    const mode = viewportMatch[1];
+    const zoom = Number(viewportMatch[2]);
+    const latitude = Number(viewportMatch[3]);
+    const longitude = Number(viewportMatch[4]);
+    if (!Number.isInteger(zoom) || zoom < 0 || zoom > 14 ||
+        !Number.isFinite(latitude) || latitude < -85.05112878 || latitude > 85.05112878 ||
+        !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      return sendJson(response, 400, { error: 'Invalid viewport coordinates' });
+    }
+
+    try {
+      const result = await viewportService.getViewport(latitude, longitude, zoom, mode);
+      const etag = etagFor(result.png);
+      if (request.headers['if-none-match'] === etag) {
+        response.writeHead(304, {
+          ETag: etag,
+          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+          'Access-Control-Allow-Origin': '*'
+        });
+        return response.end();
+      }
+      response.writeHead(200, {
+        'Content-Type': 'image/png',
+        'Content-Length': result.png.length,
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        ETag: etag,
+        'X-Viewport-Cache': result.cache,
+        'X-Map-Attribution': 'OpenStreetMap contributors',
+        'Access-Control-Allow-Origin': '*'
+      });
+      return response.end(result.png);
+    } catch (error) {
+      console.error(error);
+      return sendJson(response, 502, { error: 'Unable to render map viewport' });
+    }
+  }
+
   const match = url.pathname.match(/^\/tiles\/(v1|v1-wide|v2|v2-wide)\/(\d+)\/(\d+)\/(\d+)\.png$/);
   if (!match) {
     return sendJson(response, 404, {
       error: 'Not found',
+      viewportTemplate: '/maps/v1/{mode}/{z}/{latitude}/{longitude}.png',
       tileTemplate: '/tiles/v2/{z}/{x}/{y}.png',
       wideTileTemplate: '/tiles/v2-wide/{z}/{x}/{y}.png',
       attribution: '© OpenStreetMap contributors'

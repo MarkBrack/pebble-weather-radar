@@ -31,6 +31,7 @@ test('a rendered tile is cached and duplicate misses are coalesced', async () =>
   assert.equal(duplicate.cache, 'MISS');
   assert.equal(cached.cache, 'HIT');
   assert.equal((await readFile(service.cachePath(coords))).toString(), 'png-result');
+  assert.deepEqual(Array.from(await readFile(service.vectorCachePath(coords))), [1, 2, 3]);
   assert.equal(etagFor(cached.png), etagFor(Buffer.from('png-result')));
 });
 

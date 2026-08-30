@@ -98,12 +98,13 @@ function placeElements(tile, zoom, displayScale) {
 }
 
 export function vectorTileToSvg(buffer, zoom, variant = 'standard') {
-  const displayScale = variant === 'wide' ? 2 : 1;
+  const displayScale = variant.indexOf('wide') !== -1 ? 2 : 1;
+  const includeLabels = variant.indexOf('base-') !== 0;
   const tile = new VectorTile(new Pbf(buffer));
   const ocean = polygonElements(tile, 'ocean');
   const water = polygonElements(tile, 'water_polygons', (properties) => properties.kind !== 'glacier');
   const roads = roadElements(tile, zoom, displayScale);
-  const places = placeElements(tile, zoom, displayScale);
+  const places = includeLabels ? placeElements(tile, zoom, displayScale) : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${TILE_SIZE}" height="${TILE_SIZE}" viewBox="0 0 ${TILE_SIZE} ${TILE_SIZE}">` +
     `<rect width="256" height="256" fill="${rgb(PALETTE.land)}"/>` +
@@ -113,6 +114,25 @@ export function vectorTileToSvg(buffer, zoom, variant = 'standard') {
     `<g fill="${rgb(PALETTE.city)}" font-family="DejaVu Sans,sans-serif" font-weight="bold" ` +
       `stroke="${rgb(PALETTE.land)}" stroke-width="${2 * displayScale}" paint-order="stroke">${places}</g>` +
     '</svg>';
+}
+
+export function extractPlaceLabels(buffer, zoom) {
+  const tile = new VectorTile(new Pbf(buffer));
+  return layerFeatures(tile, 'place_labels')
+    .filter((feature) => feature.type === 1 && includePlace(feature.properties, zoom))
+    .map((feature) => {
+      const point = firstPoint(feature);
+      if (!point) return null;
+      return {
+        name: String(feature.properties.name),
+        kind: feature.properties.kind,
+        population: Number(feature.properties.population) || 0,
+        rank: placeRank(feature.properties),
+        x: point.x,
+        y: point.y
+      };
+    })
+    .filter((place) => place);
 }
 
 function nearestPaletteColor(r, g, b) {
