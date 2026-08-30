@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { renderVectorTile } from './render.js';
 
-const STYLE_VERSION = 'v1';
+const STYLE_VERSION = 'v2';
 const DEFAULT_UPSTREAM = 'https://vector.openstreetmap.org/shortbread_v1/{z}/{x}/{y}.mvt';
 const MIN_CACHE_SECONDS = 7 * 24 * 60 * 60;
 

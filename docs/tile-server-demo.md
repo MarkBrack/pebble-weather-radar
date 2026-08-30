@@ -62,8 +62,9 @@ GET /tiles/v1-wide/{z}/{x}/{y}.png
 
 The Wide endpoint doubles road, marker, label, and label-halo dimensions to
 compensate for the phone's 2× downsampling. This keeps names readable and major
-roads visible at the same apparent size as Standard view. The watch app selects
-the appropriate endpoint automatically.
+roads visible at the same apparent size as Standard view. Labels automatically flip
+towards the roomier side of a tile and clamp vertically to avoid edge clipping.
+The watch app selects the appropriate endpoint automatically.
 
 Zoom is limited to the Shortbread service's native range of 0–14. Invalid
 coordinates return HTTP 400. Responses include an ETag, public cache headers,

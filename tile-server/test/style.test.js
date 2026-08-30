@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { escapeXml, includePlace, roadRank, roadWidths } from '../src/style.js';
+import { escapeXml, includePlace, labelPlacement, roadRank, roadWidths } from '../src/style.js';
 import { parseTileCoordinates } from '../src/tile-service.js';
 
 test('road visibility increases with zoom', () => {
@@ -18,6 +18,15 @@ test('wide tiles compensate for the phone two-times downsample', () => {
   const wide = roadWidths(4, 8, 2);
   assert.equal(wide.casing, standard.casing * 2);
   assert.equal(wide.fill, standard.fill * 2);
+});
+
+test('labels flip towards the roomier tile edge and avoid vertical clipping', () => {
+  assert.deepEqual(labelPlacement({ x: 220, y: 1 }, 'Newcastle upon Tyne', 20, 2), {
+    x: 212, y: 22, anchor: 'end'
+  });
+  assert.deepEqual(labelPlacement({ x: 30, y: 255 }, 'Sunderland', 20, 2), {
+    x: 38, y: 253, anchor: 'start'
+  });
 });
 
 test('only significant populated places are labelled', () => {

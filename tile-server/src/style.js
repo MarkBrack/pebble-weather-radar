@@ -41,6 +41,19 @@ export function includePlace(properties, zoom) {
   return false;
 }
 
+export function labelPlacement(point, label, fontSize, displayScale = 1) {
+  const offset = 4 * displayScale;
+  const estimatedWidth = label.length * fontSize * 0.58;
+  const roomOnRight = TILE_SIZE - point.x - offset;
+  const roomOnLeft = point.x - offset;
+  const placeOnLeft = estimatedWidth > roomOnRight && roomOnLeft > roomOnRight;
+  return {
+    x: placeOnLeft ? point.x - offset : point.x + offset,
+    y: Math.max(fontSize + 2, Math.min(TILE_SIZE - 3, point.y + (3 * displayScale))),
+    anchor: placeOnLeft ? 'end' : 'start'
+  };
+}
+
 export function placeRank(properties) {
   const population = Number(properties.population) || 0;
   const kindBoost = properties.kind === 'capital' ? 1000000000 :

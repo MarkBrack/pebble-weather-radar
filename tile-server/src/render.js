@@ -6,6 +6,7 @@ import {
   PALETTE,
   escapeXml,
   includePlace,
+  labelPlacement,
   placeRank,
   rgb,
   roadRank,
@@ -83,16 +84,16 @@ function placeElements(tile, zoom, displayScale) {
     .slice(0, zoom >= 10 ? 8 : 5);
 
   return places.map(({ feature, point }) => {
-    const label = escapeXml(feature.properties.name);
+    const name = String(feature.properties.name);
+    const label = escapeXml(name);
     const baseSize = feature.properties.kind === 'capital' || feature.properties.kind === 'state_capital' ? 12 : 10;
     const size = baseSize * displayScale;
     const markerRadius = 2.2 * displayScale;
-    const labelOffset = 4 * displayScale;
-    const baselineOffset = 3 * displayScale;
     const x = point.x.toFixed(2);
     const y = point.y.toFixed(2);
+    const placement = labelPlacement(point, name, size, displayScale);
     return `<circle cx="${x}" cy="${y}" r="${markerRadius.toFixed(1)}"/>` +
-      `<text x="${(point.x + labelOffset).toFixed(2)}" y="${(point.y + baselineOffset).toFixed(2)}" font-size="${size}">${label}</text>`;
+      `<text x="${placement.x.toFixed(2)}" y="${placement.y.toFixed(2)}" text-anchor="${placement.anchor}" font-size="${size}">${label}</text>`;
   }).join('');
 }
 
