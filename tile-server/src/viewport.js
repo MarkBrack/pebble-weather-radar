@@ -7,7 +7,7 @@ import { PALETTE, TILE_SIZE, escapeXml, rgb } from './style.js';
 export const VIEWPORT_WIDTH = 200;
 export const VIEWPORT_HEIGHT = 228;
 const MAX_MERCATOR_LATITUDE = 85.05112878;
-const VIEW_STYLE_VERSION = 'v1';
+const VIEW_STYLE_VERSION = 'v2';
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
