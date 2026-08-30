@@ -103,6 +103,13 @@ The endpoint is disabled unless `METRICS_TOKEN` is set and never accepts the app
 tile token. On Ada, query it over SSH against `http://127.0.0.1:8081` so the
 monitoring credential does not need to cross the public Funnel.
 
+From another Tailnet device, the bundled helper provides the authenticated
+snapshot without printing the monitoring token:
+
+```bash
+tailscale ssh mark@ada /home/mark/apps/pebble-weather-radar-tile-server/show-metrics.sh
+```
+
 ## Rendering and cache flow
 
 ```text
