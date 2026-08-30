@@ -34,6 +34,9 @@ const server = createServer(async (request, response) => {
   if (url.pathname === '/healthz') return sendJson(response, 200, { status: 'ok' });
 
   if (url.pathname === '/internal/metrics') {
+    if (request.headers['x-forwarded-for'] || request.headers['x-forwarded-host']) {
+      return sendJson(response, 404, { error: 'Not found' });
+    }
     if (!metricsToken) return sendJson(response, 404, { error: 'Metrics endpoint is disabled' });
     if (!tokenMatches(metricsToken, request.headers['x-metrics-token'])) {
       return sendJson(response, 401, { error: 'Invalid or missing metrics token' });
