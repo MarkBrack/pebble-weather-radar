@@ -31,7 +31,7 @@ The app is split between the phone (PebbleKit JS) and a native Pebble C watch ap
 1. Uses manually configured coordinates when enabled; otherwise fetches the user's GPS location (falling back to a hardcoded default)
 2. Downloads OpenStreetMap raster tiles and assembles a base map centred on the location
 3. Fetches the latest radar timestamps from the RainViewer API (up to 5 candidates)
-4. Renders the background map once — remaps colours to the Pebble 64-colour palette, applies a wash for readability, draws a centre crosshair, and PackBits RLE-encodes the result
+4. Renders the background map once — remaps colours to the Pebble 64-colour palette, applies a wash for readability, and PackBits RLE-encodes the result
 5. For each radar time step, fetches the radar tile, classifies rain intensity into a compact 6-level palette, and PackBits RLE-encodes the overlay
 6. Sends the background as chunked messages, then sends each radar frame as chunked messages, followed by a batch-done signal
 
@@ -39,7 +39,7 @@ The app is split between the phone (PebbleKit JS) and a native Pebble C watch ap
 
 1. Reserves one bounded 72 KB arena and advertises its actual capacity to the phone
 2. Receives the background and as many newest radar frames as fit into that arena
-3. On batch completion, composites the display: decodes the background RLE stream, then overlays the current radar frame using the rain palette
+3. On batch completion, composites the display: decodes the background RLE stream, then overlays the current radar frame using the rain palette and draws a black centre crosshair above it
 4. Animates from the oldest stored frame to the newest; Up/Down navigation temporarily pauses the animation
 
 ### Memory model

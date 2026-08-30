@@ -195,6 +195,15 @@ static void draw_map_message(GContext *ctx, const char *message)
 		GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
 
+static void draw_location_crosshair(GContext *ctx)
+{
+	const int16_t center_x = FRAME_WIDTH / 2;
+	const int16_t center_y = FRAME_HEIGHT / 2;
+	graphics_context_set_fill_color(ctx, GColorBlack);
+	graphics_fill_rect(ctx, GRect(center_x - 10, center_y - 1, 21, 3), 0, GCornerNone);
+	graphics_fill_rect(ctx, GRect(center_x - 1, center_y - 10, 3, 21), 0, GCornerNone);
+}
+
 static void layer_update(Layer *layer, GContext *ctx)
 {
 	char age_text[16];
@@ -228,6 +237,8 @@ static void layer_update(Layer *layer, GContext *ctx)
 				GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 		}
 	}
+	draw_location_crosshair(ctx);
+
 	if (s_radar_count > 1) {
 		int16_t start_x = (FRAME_WIDTH - ((s_radar_count * 7) - 2)) / 2;
 		for (uint8_t i = 0; i < s_radar_count; i++) {

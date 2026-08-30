@@ -791,7 +791,6 @@ function renderBackgroundOnly(transport, options) {
     var mapClasses = plan.tileStyle.prestyled ?
       classifyPrestyledMap(composite) : applyPebbleMapStyle(composite);
     var pebbleRgba = cropAndScaleMapForPebble(composite, mapClasses, values);
-    drawCrosshairIntoBuffer(pebbleRgba, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     var pebble8Bit = quantizeToPebble8Bit(pebbleRgba);
 
     return {
