@@ -5,6 +5,7 @@ var DISPLAY_HEIGHT = 228;
 var BASE_SIZE = 512;
 var TILE_SIZE = 256;
 var RADAR_MAX_ZOOM = 7;
+var VIEWPORT_TIMEOUT_MS = 5000;
 
 var MAP_STYLES = {
   osm_standard: {
@@ -101,7 +102,8 @@ function getRenderValues(options) {
     detailScale: detailScale,
     baseSize: options.baseSize || BASE_SIZE,
     radarColor: options.radarColor || 2,
-    radarOptions: options.radarOptions || '1_1'
+    radarOptions: options.radarOptions || '1_1',
+    viewportTimeoutMs: options.viewportTimeoutMs || VIEWPORT_TIMEOUT_MS
   };
 }
 
@@ -170,6 +172,21 @@ function fetchPngRgba(fetchArrayBuffer, url) {
       height: decoded.height,
       rgba: new Uint8Array(frames[0])
     };
+  });
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise(function(resolve, reject) {
+    var timer = setTimeout(function() {
+      reject(new Error(message));
+    }, timeoutMs);
+    promise.then(function(value) {
+      clearTimeout(timer);
+      resolve(value);
+    }, function(error) {
+      clearTimeout(timer);
+      reject(error);
+    });
   });
 }
 
@@ -786,24 +803,7 @@ function cropPaletteForPebble(paletteBuffer, values) {
   throw new Error('Unsupported crop scale ' + values.cropScale);
 }
 
-function renderBackgroundOnly(transport, options) {
-  var values = getRenderValues(options);
-
-  if (values.tileServerUrl) {
-    var viewportUrl = buildViewportUrl(values);
-    return fetchPngRgba(transport.fetchArrayBuffer, viewportUrl).then(function(image) {
-      if (image.width !== DISPLAY_WIDTH || image.height !== DISPLAY_HEIGHT) {
-        throw new Error('Unexpected viewport size ' + image.width + 'x' + image.height);
-      }
-      return {
-        pebble8Bit: quantizeToPebble8Bit(image.rgba),
-        values: values,
-        plan: null,
-        viewportUrl: viewportUrl
-      };
-    });
-  }
-
+function renderBackgroundFromTiles(transport, values) {
   var plan = buildMapTilePlan(values);
 
   return fetchTilesSerially(transport, plan.tiles).then(function(tileImages) {
@@ -820,6 +820,48 @@ function renderBackgroundOnly(transport, options) {
       values: values,
       plan: plan
     };
+  });
+}
+
+function renderBackgroundOnly(transport, options) {
+  var values = getRenderValues(options);
+
+  if (!values.tileServerUrl) {
+    return renderBackgroundFromTiles(transport, values);
+  }
+
+  var viewportUrl = buildViewportUrl(values);
+  var viewportRequest = fetchPngRgba(function(url) {
+    return transport.fetchArrayBuffer(url, values.viewportTimeoutMs);
+  }, viewportUrl).then(function(image) {
+    if (image.width !== DISPLAY_WIDTH || image.height !== DISPLAY_HEIGHT) {
+      throw new Error('Unexpected viewport size ' + image.width + 'x' + image.height);
+    }
+    return {
+      pebble8Bit: quantizeToPebble8Bit(image.rgba),
+      values: values,
+      plan: null,
+      viewportUrl: viewportUrl,
+      usedFallback: false
+    };
+  });
+
+  return withTimeout(
+    viewportRequest,
+    values.viewportTimeoutMs,
+    'Tile server timed out after ' + values.viewportTimeoutMs + 'ms'
+  ).catch(function(error) {
+    var fallbackOptions = Object.assign({}, options, {
+      mapStyle: 'osm_standard',
+      tileServerUrl: null
+    });
+    var fallbackValues = getRenderValues(fallbackOptions);
+    return renderBackgroundFromTiles(transport, fallbackValues).then(function(result) {
+      result.usedFallback = true;
+      result.fallbackReason = error.message;
+      result.viewportUrl = viewportUrl;
+      return result;
+    });
   });
 }
 
@@ -842,6 +884,7 @@ module.exports = {
   DISPLAY_HEIGHT: DISPLAY_HEIGHT,
   BASE_SIZE: BASE_SIZE,
   RADAR_MAX_ZOOM: RADAR_MAX_ZOOM,
+  VIEWPORT_TIMEOUT_MS: VIEWPORT_TIMEOUT_MS,
   MAP_COLORS: MAP_COLORS,
   RAIN_COLORS: RAIN_COLORS,
   getRenderValues: getRenderValues,

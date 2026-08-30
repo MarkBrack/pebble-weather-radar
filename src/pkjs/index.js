@@ -27,10 +27,13 @@ var HARDCODED_LOCATION = {
 var refreshInFlight = false;
 var queuedRequest = null;
 
-function xhr(url, responseType) {
+function xhr(url, responseType, timeoutMs) {
   return new Promise(function(resolve, reject) {
     var request = new XMLHttpRequest();
     request.open('GET', url, true);
+    if (timeoutMs) {
+      request.timeout = timeoutMs;
+    }
     if (responseType) {
       request.responseType = responseType;
     }
@@ -49,6 +52,9 @@ function xhr(url, responseType) {
     request.onerror = function() {
       reject(new Error('Network error for ' + url));
     };
+    request.ontimeout = function() {
+      reject(new Error('Request timed out for ' + url));
+    };
     request.send();
   });
 }
@@ -60,8 +66,8 @@ function fetchJson(url) {
 }
 
 var transport = {
-  fetchArrayBuffer: function(url) {
-    return xhr(url, 'arraybuffer');
+  fetchArrayBuffer: function(url, timeoutMs) {
+    return xhr(url, 'arraybuffer', timeoutMs);
   }
 };
 
@@ -333,6 +339,9 @@ function refreshFrame(request) {
       return queueStatus('Rendering map...').then(function() {
         return renderer.renderBackgroundOnly(transport, options);
       }).then(function(bgResult) {
+        if (bgResult.usedFallback) {
+          console.log('Tile server unavailable; used standard OSM fallback: ' + bgResult.fallbackReason);
+        }
         console.log('Background rendered');
 		var bgRle = rle.encode(bgResult.pebble8Bit);
         return queueStatus('Sending map...').then(function() {

@@ -81,4 +81,47 @@ assert.strictEqual(
   'http://tiles.test/maps/v1/wide/8/54.623000/-1.302000.png'
 );
 
-console.log('Map rendering tests passed');
+function testTileServerTimeoutFallback() {
+  var encodedTile = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAADUExURfLv6REKL5sAAAAHdElNRQfqCB4SHDO9uLJ8AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA4LTMwVDE4OjI4OjUxKzAwOjAwRna0jQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOC0zMFQxODoyODo1MSswMDowMDcrDDEAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDgtMzBUMTg6Mjg6NTErMDA6MDBgPi3uAAAAH0lEQVRo3u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAvg0hAAABfxmcpwAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  var tilePng = encodedTile.buffer.slice(
+    encodedTile.byteOffset,
+    encodedTile.byteOffset + encodedTile.byteLength
+  );
+  var requestedUrls = [];
+  var transport = {
+    fetchArrayBuffer: function(url) {
+      requestedUrls.push(url);
+      if (url.indexOf('/maps/v1/') !== -1) {
+        return new Promise(function() {});
+      }
+      return Promise.resolve(tilePng);
+    }
+  };
+
+  return renderer.renderBackgroundOnly(transport, {
+    lat: 54.623,
+    lon: -1.302,
+    mapZoom: 8,
+    cropMode: 'standard',
+    tileServerUrl: 'http://tiles.test',
+    viewportTimeoutMs: 5
+  }).then(function(result) {
+    assert.strictEqual(result.usedFallback, true);
+    assert.ok(result.fallbackReason.indexOf('timed out') !== -1);
+    assert.strictEqual(result.values.tileServerUrl, null);
+    assert.ok(requestedUrls[0].indexOf('/maps/v1/standard/') !== -1);
+    assert.ok(requestedUrls.slice(1).every(function(url) {
+      return url.indexOf('https://tile.openstreetmap.org/') === 0;
+    }));
+  });
+}
+
+testTileServerTimeoutFallback().then(function() {
+  console.log('Map rendering tests passed');
+}).catch(function(error) {
+  console.error(error);
+  process.exitCode = 1;
+});

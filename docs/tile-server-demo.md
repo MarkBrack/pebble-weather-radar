@@ -126,7 +126,10 @@ The upstream URL is therefore configurable.
 
 The demo branch exposes the server base URL in the app's Clay configuration.
 When set, the companion requests one pre-styled watch-sized viewport rather
-than downloading, recolouring, stitching, and cropping slippy tiles itself.
+than downloading, recolouring, stitching, and cropping slippy tiles itself. If
+that request errors, returns an invalid image, or takes more than five seconds,
+the companion automatically renders the same view from the original public OSM
+raster tiles for that refresh. It tries the configured server again next time.
 Leave the setting blank to retain the standard raster source. Keep that source
 as the default until Lake Como, a coast, London, and a rural fixture have been
 checked on the physical watch.
